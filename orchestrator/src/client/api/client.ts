@@ -10,6 +10,7 @@ import type {
   JobSource,
   PipelineRun,
   AppSettings,
+  ResumeProjectsSettings,
 } from '../../shared/types';
 
 const API_BASE = '/api';
@@ -102,6 +103,7 @@ export async function updateSettings(update: {
   model?: string | null
   pipelineWebhookUrl?: string | null
   jobCompleteWebhookUrl?: string | null
+  resumeProjects?: ResumeProjectsSettings | null
 }): Promise<AppSettings> {
   return fetchApi<AppSettings>('/settings', {
     method: 'PATCH',

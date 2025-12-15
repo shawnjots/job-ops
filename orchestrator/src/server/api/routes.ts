@@ -10,6 +10,12 @@ import * as settingsRepo from '../repositories/settings.js';
 import { runPipeline, processJob, getPipelineStatus, subscribeToProgress, getProgress } from '../pipeline/index.js';
 import { createNotionEntry } from '../services/notion.js';
 import { clearDatabase } from '../db/clear.js';
+import {
+  extractProjectsFromProfile,
+  loadResumeProfile,
+  normalizeResumeProjectsSettings,
+  resolveResumeProjectsSettings,
+} from '../services/resumeProjects.js';
 import type { Job, JobStatus, ApiResponse, JobsListResponse, PipelineStatusResponse } from '../../shared/types.js';
 
 export const apiRouter = Router();
@@ -224,6 +230,11 @@ apiRouter.get('/settings', async (_req: Request, res: Response) => {
     const defaultJobCompleteWebhookUrl = process.env.JOB_COMPLETE_WEBHOOK_URL || '';
     const jobCompleteWebhookUrl = overrideJobCompleteWebhookUrl || defaultJobCompleteWebhookUrl;
 
+    const profile = await loadResumeProfile();
+    const { catalog } = extractProjectsFromProfile(profile);
+    const overrideResumeProjectsRaw = await settingsRepo.getSetting('resumeProjects');
+    const resumeProjectsData = resolveResumeProjectsSettings({ catalog, overrideRaw: overrideResumeProjectsRaw });
+
     res.json({
       success: true,
       data: {
@@ -236,6 +247,7 @@ apiRouter.get('/settings', async (_req: Request, res: Response) => {
         jobCompleteWebhookUrl,
         defaultJobCompleteWebhookUrl,
         overrideJobCompleteWebhookUrl,
+        ...resumeProjectsData,
       },
     });
   } catch (error) {
@@ -248,6 +260,11 @@ const updateSettingsSchema = z.object({
   model: z.string().trim().min(1).max(200).nullable().optional(),
   pipelineWebhookUrl: z.string().trim().min(1).max(2000).nullable().optional(),
   jobCompleteWebhookUrl: z.string().trim().min(1).max(2000).nullable().optional(),
+  resumeProjects: z.object({
+    maxProjects: z.number().int().min(0).max(50),
+    lockedProjectIds: z.array(z.string().trim().min(1)).max(200),
+    aiSelectableProjectIds: z.array(z.string().trim().min(1)).max(200),
+  }).nullable().optional(),
 });
 
 /**
@@ -272,6 +289,20 @@ apiRouter.patch('/settings', async (req: Request, res: Response) => {
       await settingsRepo.setSetting('jobCompleteWebhookUrl', webhookUrl);
     }
 
+    if ('resumeProjects' in input) {
+      const resumeProjects = input.resumeProjects ?? null;
+
+      if (resumeProjects === null) {
+        await settingsRepo.setSetting('resumeProjects', null);
+      } else {
+        const profile = await loadResumeProfile();
+        const { catalog } = extractProjectsFromProfile(profile);
+        const allowed = new Set(catalog.map((p) => p.id));
+        const normalized = normalizeResumeProjectsSettings(resumeProjects, allowed);
+        await settingsRepo.setSetting('resumeProjects', JSON.stringify(normalized));
+      }
+    }
+
     const overrideModel = await settingsRepo.getSetting('model');
     const defaultModel = process.env.MODEL || 'openai/gpt-4o-mini';
     const model = overrideModel || defaultModel;
@@ -283,6 +314,11 @@ apiRouter.patch('/settings', async (req: Request, res: Response) => {
     const overrideJobCompleteWebhookUrl = await settingsRepo.getSetting('jobCompleteWebhookUrl');
     const defaultJobCompleteWebhookUrl = process.env.JOB_COMPLETE_WEBHOOK_URL || '';
     const jobCompleteWebhookUrl = overrideJobCompleteWebhookUrl || defaultJobCompleteWebhookUrl;
+
+    const profile = await loadResumeProfile();
+    const { catalog } = extractProjectsFromProfile(profile);
+    const overrideResumeProjectsRaw = await settingsRepo.getSetting('resumeProjects');
+    const resumeProjectsData = resolveResumeProjectsSettings({ catalog, overrideRaw: overrideResumeProjectsRaw });
 
     res.json({
       success: true,
@@ -296,6 +332,7 @@ apiRouter.patch('/settings', async (req: Request, res: Response) => {
         jobCompleteWebhookUrl,
         defaultJobCompleteWebhookUrl,
         overrideJobCompleteWebhookUrl,
+        ...resumeProjectsData,
       },
     });
   } catch (error) {

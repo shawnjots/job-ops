@@ -9,6 +9,10 @@ import { fileURLToPath } from 'url';
 import { readFile, writeFile, mkdir, access } from 'fs/promises';
 import { existsSync } from 'fs';
 
+import { getSetting } from '../repositories/settings.js';
+import { pickProjectIdsForJob } from './projectSelection.js';
+import { extractProjectsFromProfile, resolveResumeProjectsSettings } from './resumeProjects.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Paths - can be overridden via env for Docker
@@ -28,11 +32,13 @@ export interface PdfResult {
  * 
  * @param jobId - Unique job identifier (used for filename)
  * @param tailoredSummary - The AI-generated summary to inject
+ * @param jobDescription - Job description text for project selection
  * @param baseResumePath - Path to the base resume JSON (optional)
  */
 export async function generatePdf(
   jobId: string,
   tailoredSummary: string,
+  jobDescription: string,
   baseResumePath?: string
 ): Promise<PdfResult> {
   console.log(`📄 Generating PDF for job ${jobId}...`);
@@ -53,6 +59,39 @@ export async function generatePdf(
       baseResume.sections.summary.content = tailoredSummary;
     } else if (baseResume.basics?.summary) {
       baseResume.basics.summary = tailoredSummary;
+    }
+
+    // Select projects (locked + AI-picked) and set visibility for RXResume
+    try {
+      const { catalog, selectionItems } = extractProjectsFromProfile(baseResume);
+      const overrideResumeProjectsRaw = await getSetting('resumeProjects');
+      const { resumeProjects } = resolveResumeProjectsSettings({ catalog, overrideRaw: overrideResumeProjectsRaw });
+
+      const locked = resumeProjects.lockedProjectIds;
+      const desiredCount = Math.max(0, resumeProjects.maxProjects - locked.length);
+      const eligibleSet = new Set(resumeProjects.aiSelectableProjectIds);
+      const eligibleProjects = selectionItems.filter((p) => eligibleSet.has(p.id));
+
+      const picked = await pickProjectIdsForJob({
+        jobDescription,
+        eligibleProjects,
+        desiredCount,
+      });
+
+      const selectedSet = new Set([...locked, ...picked]);
+      const projectsSection = (baseResume as any)?.sections?.projects;
+      const projectItems = projectsSection?.items;
+      if (Array.isArray(projectItems)) {
+        for (const item of projectItems) {
+          if (!item || typeof item !== 'object') continue;
+          const id = typeof (item as any).id === 'string' ? (item as any).id : '';
+          if (!id) continue;
+          (item as any).visible = selectedSet.has(id);
+        }
+        projectsSection.visible = selectedSet.size > 0;
+      }
+    } catch {
+      // Non-fatal: fall back to whatever visibility is in base.json
     }
     
     // Write modified resume to temp file

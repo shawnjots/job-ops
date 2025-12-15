@@ -172,6 +172,20 @@ export interface PipelineStatusResponse {
   nextScheduledRun: string | null;
 }
 
+export interface ResumeProjectCatalogItem {
+  id: string;
+  name: string;
+  description: string;
+  date: string;
+  isVisibleInBase: boolean;
+}
+
+export interface ResumeProjectsSettings {
+  maxProjects: number;
+  lockedProjectIds: string[];
+  aiSelectableProjectIds: string[];
+}
+
 export interface AppSettings {
   model: string;
   defaultModel: string;
@@ -182,4 +196,8 @@ export interface AppSettings {
   jobCompleteWebhookUrl: string;
   defaultJobCompleteWebhookUrl: string;
   overrideJobCompleteWebhookUrl: string | null;
+  profileProjects: ResumeProjectCatalogItem[];
+  resumeProjects: ResumeProjectsSettings;
+  defaultResumeProjects: ResumeProjectsSettings;
+  overrideResumeProjects: ResumeProjectsSettings | null;
 }

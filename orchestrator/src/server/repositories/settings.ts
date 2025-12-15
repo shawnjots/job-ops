@@ -10,6 +10,7 @@ const { settings } = schema
 export type SettingKey = 'model'
   | 'pipelineWebhookUrl'
   | 'jobCompleteWebhookUrl'
+  | 'resumeProjects'
 
 export async function getSetting(key: SettingKey): Promise<string | null> {
   const [row] = await db.select().from(settings).where(eq(settings.key, key))

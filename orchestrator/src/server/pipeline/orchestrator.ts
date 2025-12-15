@@ -317,6 +317,7 @@ export async function processJob(jobId: string): Promise<{
     const pdfResult = await generatePdf(
       job.id,
       job.tailoredSummary || '',
+      job.jobDescription || '',
       DEFAULT_PROFILE_PATH
     );
     
