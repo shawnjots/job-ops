@@ -44,6 +44,8 @@ export interface Job {
   suitabilityScore: number | null;   // 0-100 AI-generated score
   suitabilityReason: string | null;  // AI explanation
   tailoredSummary: string | null;    // Generated resume summary
+  tailoredHeadline: string | null;   // Generated resume headline
+  tailoredSkills: string | null;     // Generated resume skills (JSON)
   selectedProjectIds: string | null; // Comma-separated IDs of selected projects
   pdfPath: string | null;            // Path to generated PDF
   notionPageId: string | null;       // Notion page ID if synced
@@ -133,6 +135,8 @@ export interface UpdateJobInput {
   suitabilityScore?: number;
   suitabilityReason?: string;
   tailoredSummary?: string;
+  tailoredHeadline?: string;
+  tailoredSkills?: string;
   selectedProjectIds?: string;
   pdfPath?: string;
   notionPageId?: string;

@@ -27,18 +27,24 @@ export interface PdfResult {
   error?: string;
 }
 
+export interface TailoredPdfContent {
+  summary?: string | null;
+  headline?: string | null;
+  skills?: any | null;  // Accept any for flexibility, expected to be items array or parsed JSON
+}
+
 /**
  * Generate a tailored PDF resume for a job.
  * 
- * @param jobId - Unique job identifier (used for filename)
- * @param tailoredSummary - The AI-generated summary to inject
- * @param jobDescription - Job description text for project selection
- * @param baseResumePath - Path to the base resume JSON (optional)
- * @param selectedProjectIds - Comma-separated list of selected project IDs (optional manual override)
+ * @param jobId - Unique job identifier
+ * @param tailoredContent - Content to inject (summary, headline, skills)
+ * @param jobDescription - Job description (for project selection)
+ * @param baseResumePath - Optional path to base JSON
+ * @param selectedProjectIds - Optional overrides
  */
 export async function generatePdf(
   jobId: string,
-  tailoredSummary: string,
+  tailoredContent: TailoredPdfContent,
   jobDescription: string,
   baseResumePath?: string,
   selectedProjectIds?: string | null
@@ -57,10 +63,34 @@ export async function generatePdf(
     const baseResume = JSON.parse(await readFile(resumeJsonPath, 'utf-8'));
     
     // Inject tailored summary
-    if (baseResume.sections?.summary) {
-      baseResume.sections.summary.content = tailoredSummary;
-    } else if (baseResume.basics?.summary) {
-      baseResume.basics.summary = tailoredSummary;
+    if (tailoredContent.summary) {
+      if (baseResume.sections?.summary) {
+        baseResume.sections.summary.content = tailoredContent.summary;
+      } else if (baseResume.basics?.summary) {
+        baseResume.basics.summary = tailoredContent.summary;
+      }
+    }
+
+    // Inject tailored headline
+    if (tailoredContent.headline) {
+      if (baseResume.basics) {
+        // Support both standard JSON Resume 'label' and RxResume 'headline'
+        baseResume.basics.headline = tailoredContent.headline;
+        baseResume.basics.label = tailoredContent.headline;
+      }
+    }
+
+    // Inject tailored skills
+    if (tailoredContent.skills) {
+      const newSkills = Array.isArray(tailoredContent.skills) 
+        ? tailoredContent.skills 
+        : typeof tailoredContent.skills === 'string' 
+          ? JSON.parse(tailoredContent.skills) 
+          : null;
+
+      if (newSkills && baseResume.sections?.skills) {
+        baseResume.sections.skills.items = newSkills;
+      }
     }
 
     // Select projects (manual override OR locked + AI-picked) and set visibility for RXResume

@@ -1,43 +1,37 @@
 /**
- * Service for generating tailored resume summaries.
- * Wraps the existing Python generate_summary.py script.
+ * Service for generating tailored resume content (Summary, Headline, Skills).
  */
-
-import { spawn } from 'child_process';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { writeFile, unlink } from 'fs/promises';
-import { randomUUID } from 'crypto';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const RESUME_GEN_DIR = join(__dirname, '../../../../resume-generator');
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export interface SummaryResult {
+export interface TailoredData {
+  summary: string;
+  headline: string;
+  skills: any[]; 
+}
+
+export interface TailoringResult {
   success: boolean;
-  summary?: string;
+  data?: TailoredData;
   error?: string;
 }
 
 /**
- * Generate a tailored resume summary for a job.
- * Uses the native implementation instead of calling Python.
+ * Generate tailored resume content (summary, headline, skills) for a job.
  */
-export async function generateSummary(
+export async function generateTailoring(
   jobDescription: string,
   profile: Record<string, unknown>
-): Promise<SummaryResult> {
+): Promise<TailoringResult> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   
   if (!apiKey) {
-    console.warn('⚠️ OPENROUTER_API_KEY not set, cannot generate summary');
+    console.warn('⚠️ OPENROUTER_API_KEY not set, cannot generate tailoring');
     return { success: false, error: 'API key not configured' };
   }
   
   const model = process.env.MODEL || 'openai/gpt-4o-mini';
-  
-  const prompt = buildSummaryPrompt(profile, jobDescription);
+  const prompt = buildTailoringPrompt(profile, jobDescription);
   
   try {
     const response = await fetch(OPENROUTER_API_URL, {
@@ -51,6 +45,7 @@ export async function generateSummary(
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
       }),
     });
     
@@ -59,104 +54,110 @@ export async function generateSummary(
     }
     
     const data = await response.json();
-    const summary = data.choices[0]?.message?.content;
+    const content = data.choices[0]?.message?.content;
     
-    if (!summary) {
+    if (!content) {
       throw new Error('No content in response');
     }
     
-    return { success: true, summary: sanitizeTailoredSummary(summary) };
+    const parsed = JSON.parse(content);
+    
+    // Basic validation
+    if (!parsed.summary || !parsed.headline || !Array.isArray(parsed.skills)) {
+      console.warn('⚠️ AI response missing required fields:', parsed);
+    }
+
+    return { 
+      success: true, 
+      data: {
+        summary: sanitizeText(parsed.summary || ''),
+        headline: sanitizeText(parsed.headline || ''),
+        skills: parsed.skills || []
+      } 
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return { success: false, error: message };
   }
-}
-
-function buildSummaryPrompt(profile: Record<string, unknown>, jd: string): string {
-  return `
-You are generating a tailored résumé summary for me.
-
-Requirements:
-- Use keywords found in the job description.
-- Keep it concise but meaningful. Avoid fluff. Avoid long-winded text.
-- Include just enough detail to feel real and grounded.
-- Gently convey that I care about helping people and doing good work.
-- Do NOT invent experience or skills I don't have.
-- Maintain a warm, confident, human tone.
-- Target THIS specific job directly, so use ATS keywords, while remaining natural.
-- Use the profile to add context and details.
-
-My profile (JSON fields merged):
-${JSON.stringify(profile, null, 2)}
-
-Job description:
-${jd}
-
-Write the résumé summary now.
-`;
 }
 
 /**
- * Alternative: Call the Python script directly.
- * Useful if the Python script has additional functionality.
+ * Backwards compatibility wrapper if needed, or alias.
  */
-export async function generateSummaryViaPython(
-  jobDescription: string
-): Promise<SummaryResult> {
-  const tempFile = join(RESUME_GEN_DIR, `temp_jd_${randomUUID()}.txt`);
-  
-  try {
-    // Write JD to temp file
-    await writeFile(tempFile, jobDescription);
-    
-    // Call Python script
-    const result = await new Promise<string>((resolve, reject) => {
-      let output = '';
-      let error = '';
-      
-      const child = spawn('python3', ['generate_summary.py', '--file', tempFile], {
-        cwd: RESUME_GEN_DIR,
-        env: { ...process.env },
-      });
-      
-      child.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-      
-      child.stderr.on('data', (data) => {
-        error += data.toString();
-      });
-      
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve(output);
-        } else {
-          reject(new Error(error || `Process exited with code ${code}`));
-        }
-      });
-      
-      child.on('error', reject);
-    });
-    
-    return { success: true, summary: sanitizeTailoredSummary(result) };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return { success: false, error: message };
-  } finally {
-    // Cleanup temp file
-    try {
-      await unlink(tempFile);
-    } catch {
-      // Ignore cleanup errors
-    }
-  }
+export async function generateSummary(
+  jobDescription: string,
+  profile: Record<string, unknown>
+): Promise<{ success: boolean; summary?: string; error?: string }> {
+  // If we just need summary, we can discard the rest (or cache it? but here we just return summary)
+  const result = await generateTailoring(jobDescription, profile);
+  return {
+    success: result.success,
+    summary: result.data?.summary,
+    error: result.error
+  };
 }
 
-function sanitizeTailoredSummary(summary: string): string {
-  const withoutBoldPreface = summary.replace(/\*\*[\s\S]*?\*\*/g, '');
-  return withoutBoldPreface
-    .replace(/^\s*[-–—:]+\s*/g, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
+function buildTailoringPrompt(profile: Record<string, unknown>, jd: string): string {
+  // Extract only needed parts of profile to save tokens
+  const relevantProfile = {
+    basics: {
+      name: (profile as any).basics?.name,
+      label: (profile as any).basics?.label, // Original headline
+      summary: (profile as any).basics?.summary,
+    },
+    skills: (profile as any).sections?.skills || (profile as any).skills,
+    projects: (profile as any).sections?.projects?.items?.map((p: any) => ({
+        name: p.name,
+        description: p.description,
+        keywords: p.keywords
+    })),
+    experience: (profile as any).sections?.experience?.items?.map((e: any) => ({
+        company: e.company,
+        position: e.position,
+        summary: e.summary
+    }))
+  };
+
+  return `
+You are an expert resume writer tailoring a profile for a specific job application.
+You must return a JSON object with three fields: "headline", "summary", and "skills".
+
+JOB DESCRIPTION:
+${jd.slice(0, 3000)} ... (truncated if too long)
+
+MY PROFILE:
+${JSON.stringify(relevantProfile, null, 2)}
+
+INSTRUCTIONS:
+
+1. "headline" (String):
+   - CRITICAL: This is the #1 ATS factor.
+   - It must match the Job Title from the JD exactly (e.g., if JD says "Senior React Dev", use "Senior React Dev").
+   - If the JD title is very generic, you may add one specialty, but keep it matching the role.
+
+2. "summary" (String):
+   - The Hook. This needs to mirror the company's "About You" / "What we're looking for" section.
+   - Keep it concise, warm, and confident.
+   - Do NOT invent experience.
+   - Use the profile to add context.
+
+3. "skills" (Array of Objects):
+   - Review my existing skills section structure.
+   - Keyword Stuffing: Swap synonyms to match the JD exactly (e.g. "TDD" -> "Unit Testing", "ReactJS" -> "React").
+   - Keep my original skill levels and categories, just rename/reorder keywords to prioritize JD terms.
+   - Return the full "items" array for the skills section, preserving the structure: { "name": "Frontend", "keywords": [...] }.
+
+OUTPUT FORMAT (JSON):
+{
+  "headline": "...",
+  "summary": "...",
+  "skills": [ ... ]
+}
+`;
+}
+
+function sanitizeText(text: string): string {
+  return text
+    .replace(/\*\*[\s\S]*?\*\*/g, '') // remove markdown bold
     .trim();
 }

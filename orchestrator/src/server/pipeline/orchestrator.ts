@@ -14,7 +14,7 @@ import { runCrawler } from '../services/crawler.js';
 import { runJobSpy } from '../services/jobspy.js';
 import { runUkVisaJobs } from '../services/ukvisajobs.js';
 import { scoreJobSuitability } from '../services/scorer.js';
-import { generateSummary } from '../services/summary.js';
+import { generateTailoring } from '../services/summary.js';
 import { generatePdf } from '../services/pdf.js';
 import { getSetting } from '../repositories/settings.js';
 import { pickProjectIdsForJob } from '../services/projectSelection.js';
@@ -391,13 +391,18 @@ export async function summarizeJob(
 
     const profile = await loadProfile(DEFAULT_PROFILE_PATH);
 
-    // 1. Generate Summary
+    // 1. Generate Summary & Tailoring
     let tailoredSummary = job.tailoredSummary;
-    if (!tailoredSummary || options?.force) {
-      console.log('   Generating summary...');
-      const summaryResult = await generateSummary(job.jobDescription || '', profile);
-      if (summaryResult.success) {
-        tailoredSummary = summaryResult.summary ?? null;
+    let tailoredHeadline = job.tailoredHeadline;
+    let tailoredSkills = job.tailoredSkills;
+
+    if (!tailoredSummary || !tailoredHeadline || options?.force) {
+      console.log('   Generating tailoring (summary, headline, skills)...');
+      const tailoringResult = await generateTailoring(job.jobDescription || '', profile);
+      if (tailoringResult.success && tailoringResult.data) {
+        tailoredSummary = tailoringResult.data.summary;
+        tailoredHeadline = tailoringResult.data.headline;
+        tailoredSkills = JSON.stringify(tailoringResult.data.skills);
       }
     }
 
@@ -429,6 +434,8 @@ export async function summarizeJob(
 
     await jobsRepo.updateJob(job.id, {
       tailoredSummary: tailoredSummary ?? undefined,
+      tailoredHeadline: tailoredHeadline ?? undefined,
+      tailoredSkills: tailoredSkills ?? undefined,
       selectedProjectIds: selectedProjectIds ?? undefined,
     });
 
@@ -459,7 +466,11 @@ export async function generateFinalPdf(
 
     const pdfResult = await generatePdf(
       job.id,
-      job.tailoredSummary || '',
+      {
+        summary: job.tailoredSummary || '',
+        headline: job.tailoredHeadline || '',
+        skills: job.tailoredSkills ? JSON.parse(job.tailoredSkills) : []
+      },
       job.jobDescription || '',
       DEFAULT_PROFILE_PATH,
       job.selectedProjectIds
