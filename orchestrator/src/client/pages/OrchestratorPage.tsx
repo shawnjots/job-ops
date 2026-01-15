@@ -681,14 +681,34 @@ export const OrchestratorPage: React.FC = () => {
                       key={source}
                       checked={pipelineSources.includes(source)}
                       onCheckedChange={(checked) => toggleSource(source, Boolean(checked))}
+                      onSelect={(e) => e.preventDefault()}
                     >
                       {sourceLabel[source]}
                     </DropdownMenuCheckboxItem>
                   ))}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => setPipelineSources(orderedSources)}>All sources</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setPipelineSources(["gradcracker"])}>Gradcracker only</DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setPipelineSources(["indeed", "linkedin"])}>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setPipelineSources(orderedSources);
+                    }}
+                  >
+                    All sources
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setPipelineSources(["gradcracker"]);
+                    }}
+                  >
+                    Gradcracker only
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setPipelineSources(["indeed", "linkedin"]);
+                    }}
+                  >
                     Indeed + LinkedIn only
                   </DropdownMenuItem>
                 </DropdownMenuContent>

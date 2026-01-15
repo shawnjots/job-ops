@@ -166,25 +166,33 @@ export const Header: React.FC<HeaderProps> = ({
                     onCheckedChange={(checked) =>
                       toggleSource(source, Boolean(checked))
                     }
+                    onSelect={(e) => e.preventDefault()}
                   >
                     {sourceLabel[source]}
                   </DropdownMenuCheckboxItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onSelect={() => onPipelineSourcesChange(orderedSources)}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onPipelineSourcesChange(orderedSources);
+                  }}
                 >
                   All sources
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={() => onPipelineSourcesChange(["gradcracker"])}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onPipelineSourcesChange(["gradcracker"]);
+                  }}
                 >
                   Gradcracker only
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={() =>
-                    onPipelineSourcesChange(["indeed", "linkedin"])
-                  }
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onPipelineSourcesChange(["indeed", "linkedin"]);
+                  }}
                 >
                   Indeed + LinkedIn only
                 </DropdownMenuItem>
