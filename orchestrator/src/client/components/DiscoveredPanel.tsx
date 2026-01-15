@@ -30,6 +30,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import * as api from "../api";
+import { FitAssessment } from ".";
 import type { Job, ResumeProjectCatalogItem } from "../../shared/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,46 +62,6 @@ const formatDate = (dateStr: string | null) => {
   }
 };
 
-const getScoreLabel = (
-  score: number | null
-): { label: string; color: string; description: string } => {
-  if (score == null)
-    return {
-      label: "Unscored",
-      color: "text-muted-foreground",
-      description: "No AI assessment yet",
-    };
-  if (score >= 80)
-    return {
-      label: "Excellent fit",
-      color: "text-emerald-400",
-      description: "Strong match for your profile",
-    };
-  if (score >= 65)
-    return {
-      label: "Good fit",
-      color: "text-emerald-400/80",
-      description: "Solid match worth considering",
-    };
-  if (score >= 50)
-    return {
-      label: "Possible fit",
-      color: "text-amber-400",
-      description: "Some relevant aspects",
-    };
-  if (score >= 35)
-    return {
-      label: "Weak fit",
-      color: "text-orange-400",
-      description: "Limited alignment",
-    };
-  return {
-    label: "Poor fit",
-    color: "text-rose-400",
-    description: "May not be worth pursuing",
-  };
-};
-
 const stripHtml = (value: string) =>
   value
     .replace(/<[^>]*>/g, " ")
@@ -112,44 +73,6 @@ const sourceLabel: Record<Job["source"], string> = {
   indeed: "Indeed",
   linkedin: "LinkedIn",
   ukvisajobs: "UK Visa Jobs",
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Fit Summary Component (for Decide mode)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface FitSummaryProps {
-  job: Job;
-}
-
-const FitSummary: React.FC<FitSummaryProps> = ({ job }) => {
-  return (
-    <div className='space-y-3'>
-      {/* AI Assessment */}
-      {job.suitabilityReason && (
-        <div className='rounded-lg border border-border/40 bg-muted/10 p-3'>
-          <div className='text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1.5'>
-            AI Assessment
-          </div>
-          <p className='text-sm text-foreground/80 leading-relaxed'>
-            {job.suitabilityReason}
-          </p>
-        </div>
-      )}
-
-      {/* No assessment fallback */}
-      {!job.suitabilityReason && !job.suitabilityScore && (
-        <div className='rounded-lg border border-border/40 bg-muted/10 p-3 text-center'>
-          <p className='text-sm text-muted-foreground'>
-            No AI assessment available yet.
-          </p>
-          <p className='text-xs text-muted-foreground/70 mt-1'>
-            Review the job description to decide if you want to tailor.
-          </p>
-        </div>
-      )}
-    </div>
-  );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +95,6 @@ const DecideMode: React.FC<DecideModeProps> = ({
   const [showDescription, setShowDescription] = useState(false);
   const deadline = formatDate(job.deadline);
   const jobLink = job.applicationLink || job.jobUrl;
-  const scoreInfo = getScoreLabel(job.suitabilityScore);
 
   const description = useMemo(() => {
     if (!job.jobDescription) return "No description available.";
@@ -195,25 +117,13 @@ const DecideMode: React.FC<DecideModeProps> = ({
             </p>
           </div>
 
-          <div className="flex flex-col items-center space-y-2">
+          <div className="flex flex-col items-center justify-center">
             <Badge
               variant='outline'
               className='text-[10px] uppercase tracking-wide text-muted-foreground border-border/50 shrink-0'
             >
               {sourceLabel[job.source]}
             </Badge>
-            {job.suitabilityScore != null && (
-              <div className='flex justify-end'>
-                <span
-                  className={cn(
-                    "text-xl font-bold tabular-nums",
-                    scoreInfo.color
-                  )}
-                >
-                  {job.suitabilityScore}%
-                </span>
-              </div>
-            )}
           </div>
         </div>
 
@@ -244,7 +154,7 @@ const DecideMode: React.FC<DecideModeProps> = ({
 
       {/* Fit Summary - the core content */}
       <div className='flex-1 py-4 space-y-4 overflow-y-auto'>
-        <FitSummary job={job} />
+        <FitAssessment job={job} />
 
         {/* Collapsible full description */}
         <div className='space-y-2'>

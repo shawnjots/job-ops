@@ -2,6 +2,7 @@ export { Header } from './Header';
 export { Stats } from './Stats';
 export { StatusBadge } from './StatusBadge';
 export { ScoreIndicator } from './ScoreIndicator';
+export { FitAssessment } from './FitAssessment';
 export { JobCard } from './JobCard';
 export { JobTable } from './JobTable';
 export { JobList } from './JobList';

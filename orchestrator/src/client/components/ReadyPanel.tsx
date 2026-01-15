@@ -22,7 +22,6 @@ import {
   Briefcase,
   Building2,
   FolderKanban,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -43,6 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { copyTextToClipboard, formatJobForWebhook } from "@client/lib/jobCopy";
 import * as api from "../api";
+import { FitAssessment } from ".";
 import type { Job, ResumeProjectCatalogItem } from "../../shared/types";
 
 interface ReadyPanelProps {
@@ -275,18 +275,7 @@ export const ReadyPanel: React.FC<ReadyPanelProps> = ({
       <div className="flex-1 py-4 space-y-4">
         {/* Job identity - confirm this is the right role */}
         <div className="space-y-3">
-          {/* AI Suitability Reasoning - Why you're a fit */}
-          {job.suitabilityReason && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-              <div className="text-[11px] font-medium uppercase tracking-wide text-primary/70 mb-1.5 flex items-center gap-1.5">
-                <Sparkles className="h-3 w-3" />
-                Fit Assessment
-              </div>
-              <p className="text-xs text-foreground/90 leading-relaxed font-medium">
-                {job.suitabilityReason}
-              </p>
-            </div>
-          )}
+          <FitAssessment job={job} />
 
           {/* Tailored summary snippet - shows what's in the PDF */}
           {tailoredSummary && (
