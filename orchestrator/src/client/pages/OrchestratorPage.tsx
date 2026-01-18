@@ -1075,7 +1075,7 @@ export const OrchestratorPage: React.FC = () => {
               </SheetTrigger>
               <SheetContent side="left" className="w-64">
                 <SheetHeader>
-                  <SheetTitle>Navigation</SheetTitle>
+                  <SheetTitle>JobOps</SheetTitle>
                 </SheetHeader>
                 <nav className="mt-6 flex flex-col gap-2">
                   {navLinks.map(({ to, label, icon: Icon }) => (
