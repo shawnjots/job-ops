@@ -115,7 +115,7 @@ const SponsorPill: React.FC<SponsorPillProps> = ({ score, names, onCheck }) => {
   };
 
   const status = getStatus(score);
-  const tooltipContent = `${score}% match${parsedNames.length > 0 ? `: ${parsedNames.join(", ")}` : ""}`;
+  const tooltipContent = `${score}% match`;
 
   return (
     <TooltipProvider>
@@ -129,7 +129,7 @@ const SponsorPill: React.FC<SponsorPillProps> = ({ score, names, onCheck }) => {
         <TooltipContent side="top" className="max-w-xs">
           {parsedNames.length > 0 && (
             <p className="text-xs font-medium space-x-1">
-              <span className="opacity-70">Matched:</span>
+              <span className="opacity-70">Matched</span>
               <span>{parsedNames.join(", ")}</span>
             </p>
           )}
