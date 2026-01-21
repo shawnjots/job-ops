@@ -28,7 +28,7 @@ export async function getProfile(profilePath?: string, forceRefresh = false): Pr
         return cachedProfile;
     } catch (error) {
         console.error(`❌ Failed to load profile from ${targetPath}:`, error);
-        return {};
+        throw error;
     }
 }
 
