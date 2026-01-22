@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator"
 import { UpdateSettingsInput } from "@shared/settings-schema"
 import type { WebhookValues } from "@client/pages/settings/types"
 import { SettingsInput } from "@client/pages/settings/components/SettingsInput"
+import { formatSecretHint } from "@client/pages/settings/utils"
 
 type WebhooksSectionProps = {
   pipelineWebhook: WebhookValues
@@ -23,8 +24,6 @@ export const WebhooksSection: React.FC<WebhooksSectionProps> = ({
   isSaving,
 }) => {
   const { register, formState: { errors } } = useFormContext<UpdateSettingsInput>()
-
-  const formatSecretHint = (hint: string | null) => (hint ? `${hint}********` : "Not set")
 
   return (
     <AccordionItem value="webhooks" className="border rounded-lg px-4">

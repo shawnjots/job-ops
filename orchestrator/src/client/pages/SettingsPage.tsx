@@ -237,7 +237,7 @@ export const SettingsPage: React.FC = () => {
     defaultValues: DEFAULT_FORM_VALUES,
   })
 
-  const { handleSubmit, reset, watch, formState: { isDirty, errors, isValid, dirtyFields } } = methods
+  const { handleSubmit, reset, setError, watch, formState: { isDirty, errors, isValid, dirtyFields } } = methods
 
   useEffect(() => {
     let isMounted = true
@@ -286,6 +286,16 @@ export const SettingsPage: React.FC = () => {
 
   const onSave = async (data: UpdateSettingsInput) => {
     if (!settings) return
+    if (data.enableBasicAuth && !settings.basicAuthActive) {
+      const password = data.basicAuthPassword?.trim() ?? ""
+      if (!password) {
+        setError("basicAuthPassword", {
+          type: "manual",
+          message: "Password is required when basic auth is enabled",
+        })
+        return
+      }
+    }
     try {
       setIsSaving(true)
 

@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { UpdateSettingsInput } from "@shared/settings-schema"
 import type { EnvSettingsValues } from "@client/pages/settings/types"
+import { formatSecretHint } from "@client/pages/settings/utils"
 import { SettingsInput } from "@client/pages/settings/components/SettingsInput"
 
 type EnvironmentSettingsSectionProps = {
@@ -13,8 +14,6 @@ type EnvironmentSettingsSectionProps = {
   isLoading: boolean
   isSaving: boolean
 }
-
-const formatSecretHint = (hint: string | null) => (hint ? `${hint}********` : "Not set")
 
 export const EnvironmentSettingsSection: React.FC<EnvironmentSettingsSectionProps> = ({
   values,

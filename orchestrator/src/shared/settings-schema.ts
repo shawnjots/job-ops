@@ -42,13 +42,6 @@ export const updateSettingsSchema = z.object({
         path: ["basicAuthUser"],
       });
     }
-    if (!data.basicAuthPassword || data.basicAuthPassword.trim() === "") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Password is required when basic auth is enabled",
-        path: ["basicAuthPassword"],
-      });
-    }
   }
 });
 

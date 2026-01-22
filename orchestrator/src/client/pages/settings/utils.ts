@@ -12,3 +12,5 @@ export function resumeProjectsEqual(a: ResumeProjectsSettings, b: ResumeProjects
     arraysEqual(a.aiSelectableProjectIds, b.aiSelectableProjectIds)
   )
 }
+
+export const formatSecretHint = (hint: string | null) => (hint ? `${hint}********` : "Not set")

@@ -92,7 +92,13 @@ export async function getEnvSettingsData(
   for (const { settingKey, envKey, hintKey } of privateStringConfig) {
     const override = activeOverrides[settingKey] ?? null;
     const rawValue = override ?? process.env[envKey];
-    privateValues[hintKey] = rawValue ? rawValue.slice(0, 4) : null;
+    if (!rawValue) {
+      privateValues[hintKey] = null;
+      continue;
+    }
+
+    const hintLength = rawValue.length > 4 ? 4 : Math.max(rawValue.length - 1, 1);
+    privateValues[hintKey] = rawValue.slice(0, hintLength);
   }
 
   const basicAuthUser = activeOverrides['basicAuthUser'] ?? process.env.BASIC_AUTH_USER;
