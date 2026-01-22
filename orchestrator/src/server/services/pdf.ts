@@ -15,8 +15,6 @@ import { pickProjectIdsForJob } from './projectSelection.js';
 import { extractProjectsFromProfile, resolveResumeProjectsSettings } from './resumeProjects.js';
 import { getDataDir } from '../config/dataDir.js';
 import { getProfile } from './profile.js';
-import { validateAndRepairJson } from './openrouter.js';
-import { resumeDataSchema } from '../../shared/rxresume-schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -168,22 +166,9 @@ export async function generatePdf(
       console.warn(`   ⚠️ Project visibility step failed for job ${jobId}:`, err);
     }
 
-    // Validate and repair the resume JSON before PDF generation
-    const validationResult = await validateAndRepairJson(baseResume, resumeDataSchema, `pdf-${jobId}`);
-    if (!validationResult.success) {
-      console.error(`❌ [Job ${jobId}] Resume validation failed: ${validationResult.error}`);
-      return { success: false, error: `Resume validation failed: ${validationResult.error}` };
-    }
-
-    if (validationResult.repaired) {
-      console.log(`🔧 [Job ${jobId}] Resume JSON was repaired by AI`);
-    }
-
-    const validatedResume = validationResult.data;
-
     // Write modified resume to temp file
     const tempResumePath = join(RESUME_GEN_DIR, `temp_resume_${jobId}.json`);
-    await writeFile(tempResumePath, JSON.stringify(validatedResume, null, 2));
+    await writeFile(tempResumePath, JSON.stringify(baseResume, null, 2));
 
     // Generate PDF using Python script - output directly to our data folder
     const outputFilename = `resume_${jobId}.pdf`;

@@ -61,14 +61,6 @@ vi.mock('./resumeProjects.js', () => ({
     })
 }));
 
-vi.mock('./openrouter.js', () => ({
-    validateAndRepairJson: vi.fn().mockImplementation(async (data: unknown) => ({
-        success: true,
-        data,
-        repaired: false
-    }))
-}));
-
 vi.mock('child_process', () => ({
     spawn: vi.fn().mockImplementation(() => ({
         stdout: { on: vi.fn() },

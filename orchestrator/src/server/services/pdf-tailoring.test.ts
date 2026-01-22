@@ -73,13 +73,6 @@ vi.mock('./resumeProjects.js', () => ({
     })
 }));
 
-// Mock validateAndRepairJson to always return success (bypass validation in tests)
-vi.mock('./openrouter.js', () => ({
-    validateAndRepairJson: vi.fn().mockImplementation((data: unknown) =>
-        Promise.resolve({ success: true, data, repaired: false })
-    ),
-}));
-
 vi.mock('child_process', () => ({
     spawn: vi.fn().mockImplementation(() => ({
         stdout: { on: vi.fn() },
