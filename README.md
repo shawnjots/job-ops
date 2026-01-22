@@ -25,7 +25,7 @@ cd job-ops
 docker compose up -d --build
 
 # 3. Open the dashboard, the app will onboard your credentials
-# http://localhost:3005
+open http://localhost:3005
 ```
 
 The app will guide you through setup on first launch. The onboarding wizard helps you:
