@@ -165,13 +165,13 @@ export const OnboardingGate: React.FC = () => {
       const message = reason instanceof Error ? reason.message : "Validation checks failed"
       toast.error(message)
     }
-  }, [settings, validateOpenrouter, validateRxresume])
+  }, [settings, validateOpenrouter, validateRxresume, validateBaseResume])
 
   useEffect(() => {
     if (!settings || settingsLoading) return
-    if (openrouterValidation.checked || rxresumeValidation.checked) return
+    if (openrouterValidation.checked || rxresumeValidation.checked || baseResumeValidation.checked) return
     void runAllValidations()
-  }, [settings, settingsLoading, openrouterValidation.checked, rxresumeValidation.checked, runAllValidations])
+  }, [settings, settingsLoading, openrouterValidation.checked, rxresumeValidation.checked, baseResumeValidation.checked, runAllValidations])
 
   const handleRefresh = async () => {
     const results = await Promise.allSettled([refreshSettings(), runAllValidations()])

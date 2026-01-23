@@ -168,8 +168,20 @@ export async function importManualJob(input: {
 }
 
 // Settings & Profile API
+let settingsPromise: Promise<AppSettings> | null = null;
+
 export async function getSettings(): Promise<AppSettings> {
-  return fetchApi<AppSettings>('/settings');
+  if (settingsPromise) return settingsPromise;
+  
+  settingsPromise = fetchApi<AppSettings>('/settings').finally(() => {
+    // Clear the promise after a short delay to allow subsequent fresh fetches
+    // but coalesce simultaneous requests.
+    setTimeout(() => {
+      settingsPromise = null;
+    }, 100);
+  });
+  
+  return settingsPromise;
 }
 
 export async function getProfileProjects(): Promise<ResumeProjectCatalogItem[]> {
@@ -260,9 +272,10 @@ export async function getRxResumes(): Promise<{ id: string; name: string }[]> {
   return data.resumes;
 }
 
-export async function getRxResumeProjects(resumeId: string): Promise<ResumeProjectCatalogItem[]> {
+export async function getRxResumeProjects(resumeId: string, signal?: AbortSignal): Promise<ResumeProjectCatalogItem[]> {
   const data = await fetchApi<{ projects: ResumeProjectCatalogItem[] }>(
-    `/settings/rx-resumes/${encodeURIComponent(resumeId)}/projects`
+    `/settings/rx-resumes/${encodeURIComponent(resumeId)}/projects`,
+    { signal }
   );
   return data.projects;
 }

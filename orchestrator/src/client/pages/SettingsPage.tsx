@@ -156,7 +156,7 @@ const normalizeResumeProjectsForCatalog = (
 
   const lockedProjectIds = base.lockedProjectIds.filter((id) => allowed.has(id))
   const lockedSet = new Set(lockedProjectIds)
-  const aiSelectableProjectIds = (base.aiSelectableProjectIds.length
+  const aiSelectableProjectIds = (current
     ? base.aiSelectableProjectIds
     : catalog.map((project) => project.id)
   )
@@ -320,21 +320,24 @@ export const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true
+    const controller = new AbortController()
 
     if (!rxResumeBaseResumeIdDraft) {
       setRxResumeProjectsOverride(null)
       return () => {
         isMounted = false
+        controller.abort()
       }
     }
 
     if (!hasRxResumeAccess) return () => {
       isMounted = false
+      controller.abort()
     }
 
     setIsFetchingRxResumeProjects(true)
     api
-      .getRxResumeProjects(rxResumeBaseResumeIdDraft)
+      .getRxResumeProjects(rxResumeBaseResumeIdDraft, controller.signal)
       .then((projects) => {
         if (!isMounted) return
         setRxResumeProjectsOverride(projects)
@@ -347,7 +350,7 @@ export const SettingsPage: React.FC = () => {
         }
       })
       .catch((error) => {
-        if (!isMounted) return
+        if (!isMounted || error.name === 'AbortError') return
         const message = error instanceof Error ? error.message : "Failed to load RxResume projects"
         toast.error(message)
         setRxResumeProjectsOverride(null)
@@ -359,6 +362,7 @@ export const SettingsPage: React.FC = () => {
 
     return () => {
       isMounted = false
+      controller.abort()
     }
   }, [rxResumeBaseResumeIdDraft, hasRxResumeAccess, getValues, setValue])
 
