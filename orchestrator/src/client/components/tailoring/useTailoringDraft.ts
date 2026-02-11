@@ -10,13 +10,6 @@ import {
   toEditableSkillGroups,
 } from "../tailoring-utils";
 
-export type TailoringActiveField =
-  | "summary"
-  | "headline"
-  | "description"
-  | "skills"
-  | null;
-
 const parseSelectedIds = (value: string | null | undefined) =>
   new Set(value?.split(",").filter(Boolean) ?? []);
 
@@ -87,8 +80,8 @@ export function useTailoringDraft({
     serializeTailoredSkills(parseTailoredSkills(job.tailoredSkills)),
   );
 
-  const [activeField, setActiveField] = useState<TailoringActiveField>(null);
   const lastJobIdRef = useRef(job.id);
+  const jobRef = useRef(job);
 
   const skillsJson = useMemo(
     () => serializeTailoredSkills(fromEditableSkillGroups(skillsDraft)),
@@ -117,42 +110,6 @@ export function useTailoringDraft({
     savedSkillsJson,
     selectedIds,
     savedSelectedIds,
-  ]);
-
-  const syncSavedSnapshot = useCallback(
-    (
-      nextSummary: string,
-      nextHeadline: string,
-      nextDescription: string,
-      nextSelectedIds: Set<string>,
-      nextSkillsDraft: EditableSkillGroup[],
-    ) => {
-      setSavedSummary(nextSummary);
-      setSavedHeadline(nextHeadline);
-      setSavedDescription(nextDescription);
-      setSavedSelectedIds(new Set(nextSelectedIds));
-      setSavedSkillsJson(
-        serializeTailoredSkills(fromEditableSkillGroups(nextSkillsDraft)),
-      );
-    },
-    [],
-  );
-
-  const markCurrentAsSaved = useCallback(() => {
-    syncSavedSnapshot(
-      summary,
-      headline,
-      jobDescription,
-      selectedIds,
-      skillsDraft,
-    );
-  }, [
-    syncSavedSnapshot,
-    summary,
-    headline,
-    jobDescription,
-    selectedIds,
-    skillsDraft,
   ]);
 
   const applyIncomingDraft = useCallback((incomingJob: Job) => {
@@ -185,27 +142,17 @@ export function useTailoringDraft({
   }, []);
 
   useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
+
+  // Only sync when job ID changes (user switched to a different job)
+  // User edits persist until explicitly saved - no auto-sync from server
+  useEffect(() => {
     if (job.id !== lastJobIdRef.current) {
       lastJobIdRef.current = job.id;
-      applyIncomingDraft(job);
-      return;
+      applyIncomingDraft(jobRef.current);
     }
-
-    if (isDirty || activeField !== null) return;
-
-    applyIncomingDraft(job);
-  }, [
-    job,
-    job.id,
-    job.tailoredSummary,
-    job.tailoredHeadline,
-    job.tailoredSkills,
-    job.jobDescription,
-    job.selectedProjectIds,
-    isDirty,
-    activeField,
-    applyIncomingDraft,
-  ]);
+  }, [job.id, applyIncomingDraft]);
 
   useEffect(() => {
     if (
@@ -264,11 +211,7 @@ export function useTailoringDraft({
     setOpenSkillGroupId,
     skillsJson,
     isDirty,
-    activeField,
-    setActiveField,
-    markCurrentAsSaved,
     applyIncomingDraft,
-    syncSavedSnapshot,
     handleToggleProject,
     handleAddSkillGroup,
     handleUpdateSkillGroup,

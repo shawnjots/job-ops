@@ -54,8 +54,6 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
     setOpenSkillGroupId,
     skillsJson,
     isDirty,
-    setActiveField,
-    markCurrentAsSaved,
     applyIncomingDraft,
     handleToggleProject,
     handleAddSkillGroup,
@@ -70,9 +68,6 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [draftStatus, setDraftStatus] = useState<
-    "unsaved" | "saving" | "saved"
-  >("saved");
 
   const savePayload = useMemo(
     () => ({
@@ -86,38 +81,14 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
   );
 
   const persistCurrent = useCallback(async () => {
-    await api.updateJob(props.job.id, savePayload);
-    markCurrentAsSaved();
-    if (tailorProps) {
-      setDraftStatus("saved");
-    }
-  }, [props.job.id, savePayload, markCurrentAsSaved, tailorProps]);
+    const updatedJob = await api.updateJob(props.job.id, savePayload);
+    applyIncomingDraft(updatedJob);
+  }, [props.job.id, savePayload, applyIncomingDraft]);
 
-  useEffect(() => {
-    if (!tailorProps) return;
-    if (isDirty && draftStatus === "saved") {
-      setDraftStatus("unsaved");
-    }
-    if (!isDirty && draftStatus === "unsaved") {
-      setDraftStatus("saved");
-    }
-  }, [tailorProps, isDirty, draftStatus]);
-
-  useEffect(() => {
-    if (!tailorProps) return;
-    if (!isDirty || draftStatus !== "unsaved") return;
-
-    const timeout = setTimeout(async () => {
-      try {
-        setDraftStatus("saving");
-        await persistCurrent();
-      } catch {
-        setDraftStatus("unsaved");
-      }
-    }, 1500);
-
-    return () => clearTimeout(timeout);
-  }, [tailorProps, isDirty, draftStatus, persistCurrent]);
+  // Note: Auto-save removed.
+  // Editor mode: user must explicitly save via the "Save Selection" button to persist changes.
+  // Tailor mode: there is no explicit save action; changes only persist when the user finalizes
+  // or otherwise completes the tailoring flow. This prevents race conditions and simplifies state.
 
   const saveChanges = useCallback(
     async ({ showToast = true }: { showToast?: boolean } = {}) => {
@@ -125,8 +96,8 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
 
       try {
         setIsSaving(true);
-        await api.updateJob(props.job.id, savePayload);
-        markCurrentAsSaved();
+        const updatedJob = await api.updateJob(props.job.id, savePayload);
+        applyIncomingDraft(updatedJob);
         if (showToast) toast.success("Changes saved");
         await editorProps.onUpdate();
       } catch (error) {
@@ -136,20 +107,13 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
         setIsSaving(false);
       }
     },
-    [editorProps, props.job.id, savePayload, markCurrentAsSaved],
+    [editorProps, props.job.id, savePayload, applyIncomingDraft],
   );
 
   useEffect(() => {
     if (!editorProps?.onRegisterSave) return;
     editorProps.onRegisterSave(() => saveChanges({ showToast: false }));
   }, [editorProps, saveChanges]);
-
-  const handleFieldBlur = useCallback(
-    (field: "summary" | "headline" | "description" | "skills") => {
-      setActiveField((prev) => (prev === field ? null : prev));
-    },
-    [setActiveField],
-  );
 
   const handleSummarizeEditor = useCallback(async () => {
     if (!editorProps) return;
@@ -185,7 +149,6 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
 
       const updatedJob = await api.summarizeJob(props.job.id, { force: true });
       applyIncomingDraft(updatedJob);
-      setDraftStatus("saved");
 
       toast.success("Draft generated with AI", {
         description: "Review and edit before finalizing.",
@@ -303,8 +266,6 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
             onUpdateSkillGroup={handleUpdateSkillGroup}
             onRemoveSkillGroup={handleRemoveSkillGroup}
             onToggleProject={handleToggleProject}
-            onFieldFocus={setActiveField}
-            onFieldBlur={handleFieldBlur}
           />
 
           <div className="flex justify-end border-t pt-4">
@@ -342,24 +303,6 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to overview
         </button>
-
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          {draftStatus === "saving" && (
-            <>
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Saving...
-            </>
-          )}
-          {draftStatus === "saved" && !isDirty && (
-            <>
-              <Check className="h-3 w-3 text-emerald-400" />
-              Saved
-            </>
-          )}
-          {draftStatus === "unsaved" && (
-            <span className="text-amber-400">Unsaved changes</span>
-          )}
-        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -409,8 +352,6 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
           onUpdateSkillGroup={handleUpdateSkillGroup}
           onRemoveSkillGroup={handleRemoveSkillGroup}
           onToggleProject={handleToggleProject}
-          onFieldFocus={setActiveField}
-          onFieldBlur={handleFieldBlur}
         />
       </div>
 
