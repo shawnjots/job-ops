@@ -13,6 +13,10 @@ type SettingsConversionValueMap = {
   jobspyResultsWanted: number;
   jobspyCountryIndeed: string;
   showSponsorInfo: boolean;
+  chatStyleTone: string;
+  chatStyleFormality: string;
+  chatStyleConstraints: string;
+  chatStyleDoNotUse: string;
   backupEnabled: boolean;
   backupHour: number;
   backupMaxCount: number;
@@ -136,6 +140,30 @@ export const settingsConversionMetadata: SettingsConversionMetadata = {
     parseOverride: parseBitBoolOrNull,
     serialize: serializeBitBool,
     resolve: resolveWithNullishFallback,
+  },
+  chatStyleTone: {
+    defaultValue: () => process.env.CHAT_STYLE_TONE || "professional",
+    parseOverride: (raw) => raw ?? null,
+    serialize: (value) => value ?? null,
+    resolve: resolveWithEmptyStringFallback,
+  },
+  chatStyleFormality: {
+    defaultValue: () => process.env.CHAT_STYLE_FORMALITY || "medium",
+    parseOverride: (raw) => raw ?? null,
+    serialize: (value) => value ?? null,
+    resolve: resolveWithEmptyStringFallback,
+  },
+  chatStyleConstraints: {
+    defaultValue: () => process.env.CHAT_STYLE_CONSTRAINTS || "",
+    parseOverride: (raw) => raw ?? null,
+    serialize: (value) => value ?? null,
+    resolve: resolveWithEmptyStringFallback,
+  },
+  chatStyleDoNotUse: {
+    defaultValue: () => process.env.CHAT_STYLE_DO_NOT_USE || "",
+    parseOverride: (raw) => raw ?? null,
+    serialize: (value) => value ?? null,
+    resolve: resolveWithEmptyStringFallback,
   },
   backupEnabled: {
     defaultValue: () => false,

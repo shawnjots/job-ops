@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatTimestamp } from "@/lib/utils";
 import * as api from "../api";
 import { ConfirmDelete } from "../components/ConfirmDelete";
+import { GhostwriterDrawer } from "../components/ghostwriter/GhostwriterDrawer";
 import { JobHeader } from "../components/JobHeader";
 import {
   type LogEventFormValues,
@@ -273,10 +274,13 @@ export const JobPage: React.FC = () => {
         <div className="space-y-4">
           <Card className="border-border/50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarClock className="h-4 w-4" />
-                Application details
-              </CardTitle>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CalendarClock className="h-4 w-4" />
+                  Application details
+                </CardTitle>
+                <GhostwriterDrawer job={job} />
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>

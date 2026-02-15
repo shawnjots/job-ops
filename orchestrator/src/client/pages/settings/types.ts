@@ -14,6 +14,12 @@ export type ModelValues = EffectiveDefault<string> & {
 
 export type WebhookValues = EffectiveDefault<string>;
 export type DisplayValues = EffectiveDefault<boolean>;
+export type ChatValues = {
+  tone: EffectiveDefault<string>;
+  formality: EffectiveDefault<string>;
+  constraints: EffectiveDefault<string>;
+  doNotUse: EffectiveDefault<string>;
+};
 
 export type EnvSettingsValues = {
   readable: {

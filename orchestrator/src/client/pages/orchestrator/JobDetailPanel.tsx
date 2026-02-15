@@ -580,7 +580,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
                 className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
                 onClick={() => setDetailTab("description")}
               >
-                View full description 
+                View full description
               </button>
             </div>
           </div>
