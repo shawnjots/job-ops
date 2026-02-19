@@ -10,9 +10,18 @@ import confetti from "canvas-confetti";
 import {
   ArrowLeft,
   CalendarClock,
+  CheckCircle2,
   ClipboardList,
+  Copy,
   DollarSign,
+  Edit2,
+  ExternalLink,
+  FileText,
+  MoreHorizontal,
   PlusCircle,
+  RefreshCcw,
+  Sparkles,
+  XCircle,
 } from "lucide-react";
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -20,10 +29,22 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatTimestamp } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  copyTextToClipboard,
+  formatJobForWebhook,
+  formatTimestamp,
+} from "@/lib/utils";
 import * as api from "../api";
 import { ConfirmDelete } from "../components/ConfirmDelete";
 import { GhostwriterDrawer } from "../components/ghostwriter/GhostwriterDrawer";
+import { JobDetailsEditDrawer } from "../components/JobDetailsEditDrawer";
 import { JobHeader } from "../components/JobHeader";
 import {
   type LogEventFormValues,
@@ -40,6 +61,8 @@ export const JobPage: React.FC = () => {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isLogModalOpen, setIsLogModalOpen] = React.useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
+  const [isEditDetailsOpen, setIsEditDetailsOpen] = React.useState(false);
+  const [activeAction, setActiveAction] = React.useState<string | null>(null);
   const [eventToDelete, setEventToDelete] = React.useState<string | null>(null);
   const [editingEvent, setEditingEvent] = React.useState<StageEvent | null>(
     null,
@@ -184,13 +207,102 @@ export const JobPage: React.FC = () => {
     setIsLogModalOpen(true);
   };
 
+  const runAction = React.useCallback(
+    async (actionKey: string, task: () => Promise<void>) => {
+      if (!job) return;
+      try {
+        setActiveAction(actionKey);
+        await task();
+        await loadData();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to run action";
+        toast.error(message);
+      } finally {
+        setActiveAction(null);
+      }
+    },
+    [job, loadData],
+  );
+
+  const handleMarkApplied = async () => {
+    await runAction("mark-applied", async () => {
+      if (!job) return;
+      await api.markAsApplied(job.id);
+      toast.success("Marked as applied");
+    });
+  };
+
+  const handleMoveToInProgress = async () => {
+    await runAction("move-in-progress", async () => {
+      if (!job) return;
+      await api.updateJob(job.id, { status: "in_progress" });
+      toast.success("Moved to in progress");
+    });
+  };
+
+  const handleSkip = async () => {
+    await runAction("skip", async () => {
+      if (!job) return;
+      await api.skipJob(job.id);
+      toast.message("Job skipped");
+    });
+  };
+
+  const handleRescore = async () => {
+    await runAction("rescore", async () => {
+      if (!job) return;
+      await api.rescoreJob(job.id);
+      toast.success("Match recalculated");
+    });
+  };
+
+  const handleRegeneratePdf = async () => {
+    await runAction("regenerate-pdf", async () => {
+      if (!job) return;
+      await api.generateJobPdf(job.id);
+      toast.success("Resume PDF generated");
+    });
+  };
+
+  const handleCheckSponsor = async () => {
+    await runAction("check-sponsor", async () => {
+      if (!job) return;
+      await api.checkSponsor(job.id);
+      toast.success("Sponsor check completed");
+    });
+  };
+
+  const handleCopyJobInfo = async () => {
+    if (!job) return;
+    try {
+      await copyTextToClipboard(formatJobForWebhook(job));
+      toast.success("Copied job info", {
+        description: "Webhook payload copied to clipboard.",
+      });
+    } catch {
+      toast.error("Could not copy job info");
+    }
+  };
+
   const currentStage = job
     ? (events.at(-1)?.toStage ??
       (job.status === "applied" || job.status === "in_progress"
         ? "applied"
         : null))
     : null;
+  const isClosedStage = currentStage === "closed";
   const canTrackStages = job?.status === "in_progress";
+  const canLogEvents = canTrackStages && !isClosedStage;
+  const jobLink = job ? job.applicationLink || job.jobUrl : null;
+  const pdfHref = job?.pdfPath
+    ? `/pdfs/resume_${job.id}.pdf?v=${encodeURIComponent(job.updatedAt)}`
+    : null;
+  const isBusy = activeAction !== null;
+  const isDiscovered = job?.status === "discovered";
+  const isReady = job?.status === "ready";
+  const isApplied = job?.status === "applied";
+  const isInProgress = job?.status === "in_progress";
 
   if (!id) {
     return null;
@@ -203,27 +315,186 @@ export const JobPage: React.FC = () => {
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <div className="flex items-center gap-3">
-          <Button
-            size="sm"
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-            onClick={() => setIsLogModalOpen(true)}
-            disabled={!job || !canTrackStages}
-          >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Log Event
-          </Button>
-        </div>
       </div>
 
       {job ? (
         <JobHeader
           job={job}
           className="rounded-lg border border-border/40 bg-muted/5 p-4"
+          onCheckSponsor={handleCheckSponsor}
         />
       ) : (
         <div className="rounded-lg border border-dashed border-border/40 p-6 text-sm text-muted-foreground">
           {isLoading ? "Loading application..." : "Application not found."}
+        </div>
+      )}
+
+      {job && (
+        <div className="rounded-xl border border-border/60 bg-card/80 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/65">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {jobLink && (
+                <Button
+                  asChild
+                  size="sm"
+                  className="h-9 border border-orange-400/50 bg-orange-500/20 text-orange-100 hover:bg-orange-500/30"
+                >
+                  <a href={jobLink} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    Open Job Listing
+                  </a>
+                </Button>
+              )}
+
+              {isReady && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 border-orange-400/50 bg-orange-500/10 text-orange-100 hover:bg-orange-500/20"
+                    onClick={() => void handleMarkApplied()}
+                    disabled={isBusy}
+                  >
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                    Mark Applied
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 border-border/60 bg-background/30"
+                    onClick={() => void handleSkip()}
+                    disabled={isBusy}
+                  >
+                    <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                    Skip Job
+                  </Button>
+                </>
+              )}
+
+              {isDiscovered && (
+                <>
+                  <Button
+                    size="sm"
+                    className="h-9 border border-orange-400/50 bg-orange-500/20 text-orange-100 hover:bg-orange-500/30"
+                    onClick={() => navigate(`/jobs/discovered/${job.id}`)}
+                    disabled={isBusy}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Start Tailoring
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 border-border/60 bg-background/30"
+                    onClick={() => void handleSkip()}
+                    disabled={isBusy}
+                  >
+                    <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                    Skip Job
+                  </Button>
+                </>
+              )}
+
+              {isApplied && (
+                <Button
+                  size="sm"
+                  className="h-9 border border-orange-400/50 bg-orange-500/20 text-orange-100 hover:bg-orange-500/30"
+                  onClick={() => void handleMoveToInProgress()}
+                  disabled={isBusy}
+                >
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  Move to In Progress
+                </Button>
+              )}
+
+              {isInProgress && (
+                <Button
+                  size="sm"
+                  className="h-9 border border-orange-400/50 bg-orange-500/20 text-orange-100 hover:bg-orange-500/30"
+                  onClick={() => setIsLogModalOpen(true)}
+                  disabled={!canLogEvents || isBusy}
+                >
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Log Event
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {isReady && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-border/60 bg-background/30"
+                  onClick={() => navigate(`/jobs/ready/${job.id}`)}
+                  disabled={isBusy}
+                >
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  Edit Tailoring
+                </Button>
+              )}
+
+              {pdfHref && (
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-border/60 bg-background/30"
+                >
+                  <a href={pdfHref} target="_blank" rel="noopener noreferrer">
+                    <FileText className="mr-1.5 h-3.5 w-3.5" />
+                    View PDF
+                  </a>
+                </Button>
+              )}
+
+              {isReady && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-border/60 bg-background/30"
+                  onClick={() => void handleRegeneratePdf()}
+                  disabled={isBusy}
+                >
+                  <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
+                  Regenerate PDF
+                </Button>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-9 w-9 border-border/60 bg-background/30"
+                    aria-label="More actions"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setIsEditDetailsOpen(true)}>
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Edit details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleCopyJobInfo()}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy job info
+                  </DropdownMenuItem>
+                  {(isReady || isDiscovered) && (
+                    <DropdownMenuItem onSelect={() => void handleRescore()}>
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      Recalculate match
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => void handleCheckSponsor()}>
+                    Check sponsorship status
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
         </div>
       )}
 
@@ -263,10 +534,15 @@ export const JobPage: React.FC = () => {
                 Move this job to In Progress to track application stages.
               </div>
             )}
+            {canTrackStages && isClosedStage && (
+              <div className="mb-4 rounded-md border border-dashed border-border/60 p-3 text-sm text-muted-foreground">
+                This application is closed. Stage logging is disabled.
+              </div>
+            )}
             <JobTimeline
               events={events}
-              onEdit={canTrackStages ? handleEditEvent : undefined}
-              onDelete={canTrackStages ? confirmDeleteEvent : undefined}
+              onEdit={canLogEvents ? handleEditEvent : undefined}
+              onDelete={canLogEvents ? confirmDeleteEvent : undefined}
             />
           </CardContent>
         </Card>
@@ -372,6 +648,13 @@ export const JobPage: React.FC = () => {
           setEventToDelete(null);
         }}
         onConfirm={handleDeleteEvent}
+      />
+
+      <JobDetailsEditDrawer
+        open={isEditDetailsOpen}
+        onOpenChange={setIsEditDetailsOpen}
+        job={job}
+        onJobUpdated={loadData}
       />
     </main>
   );
