@@ -121,6 +121,29 @@ export function clearBasicAuthCredentials(): void {
   cachedBasicAuthCredentials = null;
 }
 
+export function getCachedBasicAuthHeader(): string | undefined {
+  return cachedBasicAuthCredentials
+    ? encodeBasicAuth(cachedBasicAuthCredentials)
+    : undefined;
+}
+
+export function getCachedBasicAuthUsername(): string | undefined {
+  return cachedBasicAuthCredentials?.username;
+}
+
+export function hasBasicAuthPromptHandler(): boolean {
+  return basicAuthPromptHandler !== null;
+}
+
+export async function requestBasicAuthHeader(
+  request: BasicAuthPromptRequest,
+): Promise<string | null> {
+  const credentials = await requestBasicAuthCredentials(request);
+  if (!credentials) return null;
+  cachedBasicAuthCredentials = credentials;
+  return encodeBasicAuth(credentials);
+}
+
 export function __resetApiClientAuthForTests(): void {
   basicAuthPromptHandler = null;
   basicAuthPromptInFlight = null;
