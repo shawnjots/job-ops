@@ -85,6 +85,7 @@ export async function getEnvSettingsData(
     activeOverrides.basicAuthPassword ?? process.env.BASIC_AUTH_PASSWORD;
 
   values.basicAuthActive = Boolean(basicAuthUser && basicAuthPassword);
+  values.basicAuthPassword = normalizeEnvInput(basicAuthPassword);
 
   return values;
 }

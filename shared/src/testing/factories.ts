@@ -238,6 +238,7 @@ export const createAppSettings = (
   rxresumeUrl: null,
   rxresumePasswordHint: null,
   basicAuthUser: null,
+  basicAuthPassword: null,
   basicAuthPasswordHint: null,
   ukvisajobsEmail: null,
   ukvisajobsPasswordHint: null,

@@ -14,7 +14,7 @@ const EnvironmentSettingsHarness = () => {
       ukvisajobsPassword: "",
       adzunaAppId: "adzuna-id",
       adzunaAppKey: "",
-      basicAuthPassword: "",
+      basicAuthPassword: "super-secret",
       webhookSecret: "",
       enableBasicAuth: true,
     },
@@ -30,6 +30,7 @@ const EnvironmentSettingsHarness = () => {
               ukvisajobsEmail: "visa@example.com",
               adzunaAppId: "adzuna-id",
               basicAuthUser: "admin",
+              basicAuthPassword: "super-secret",
             },
             private: {
               rxresumePasswordHint: null,
@@ -57,11 +58,10 @@ describe("EnvironmentSettingsSection", () => {
 
     expect(screen.getByText(/pass\*{8}/)).toBeInTheDocument();
     expect(screen.getByText(/adzu\*{8}/)).toBeInTheDocument();
-    expect(screen.getByText(/abcd\*{8}/)).toBeInTheDocument();
-
     // Basic Auth
     expect(screen.getByLabelText("Enable basic authentication")).toBeChecked();
     expect(screen.getByDisplayValue("admin")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("super-secret")).toBeInTheDocument();
 
     // Sections
     expect(screen.getByText("Service Accounts")).toBeInTheDocument();

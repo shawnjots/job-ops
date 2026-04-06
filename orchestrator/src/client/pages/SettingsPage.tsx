@@ -450,7 +450,7 @@ const mapSettingsToForm = (data: AppSettings): UpdateSettingsInput => ({
   rxresumePassword: "",
   rxresumeApiKey: "",
   basicAuthUser: data.basicAuthUser ?? "",
-  basicAuthPassword: "",
+  basicAuthPassword: data.basicAuthPassword ?? "",
   ukvisajobsEmail: data.ukvisajobsEmail ?? "",
   ukvisajobsPassword: "",
   adzunaAppId: data.adzunaAppId ?? "",
@@ -602,6 +602,7 @@ const getDerivedSettings = (settings: AppSettings | null) => {
         ukvisajobsEmail: settings?.ukvisajobsEmail ?? "",
         adzunaAppId: settings?.adzunaAppId ?? "",
         basicAuthUser: settings?.basicAuthUser ?? "",
+        basicAuthPassword: settings?.basicAuthPassword ?? "",
       },
       private: {
         rxresumePasswordHint: settings?.rxresumePasswordHint ?? null,

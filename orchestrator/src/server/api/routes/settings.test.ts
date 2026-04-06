@@ -101,6 +101,7 @@ describe.sequential("Settings API routes", () => {
     expect(body.data.pdfRenderer.value).toBe("rxresume");
     expect(body.data.pdfRenderer.default).toBe("rxresume");
     expect(body.data.llmApiKeyHint).toBe("secr");
+    expect(body.data.basicAuthPassword).toBeNull();
     expect(body.data.basicAuthActive).toBe(false);
     expect(body.data.ghostwriterSystemPromptTemplate.value).toBe(
       getDefaultPromptTemplate("ghostwriterSystemPromptTemplate"),
@@ -233,6 +234,8 @@ describe.sequential("Settings API routes", () => {
         rxresumeEmail: "updated@example.com",
         rxresumeUrl: "https://resume.example.com",
         llmApiKey: "updated-secret",
+        basicAuthUser: "admin",
+        basicAuthPassword: "letmein",
         ghostwriterSystemPromptTemplate: "Custom Ghostwriter {{tone}}",
       }),
     });
@@ -245,6 +248,8 @@ describe.sequential("Settings API routes", () => {
     expect(patchBody.data.rxresumeEmail).toBe("updated@example.com");
     expect(patchBody.data.rxresumeUrl).toBe("https://resume.example.com");
     expect(patchBody.data.llmApiKeyHint).toBe("upda");
+    expect(patchBody.data.basicAuthUser).toBe("admin");
+    expect(patchBody.data.basicAuthPassword).toBe("letmein");
     expect(patchBody.data.ghostwriterSystemPromptTemplate.override).toBe(
       "Custom Ghostwriter {{tone}}",
     );

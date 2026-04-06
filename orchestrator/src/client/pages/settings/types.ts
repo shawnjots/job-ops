@@ -39,6 +39,7 @@ export type EnvSettingsValues = {
     ukvisajobsEmail: string;
     adzunaAppId: string;
     basicAuthUser: string;
+    basicAuthPassword: string;
   };
   private: {
     rxresumePasswordHint: string | null;

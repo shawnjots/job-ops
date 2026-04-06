@@ -203,6 +203,7 @@ export interface AppSettings {
   ukvisajobsEmail: string | null;
   adzunaAppId: string | null;
   basicAuthUser: string | null;
+  basicAuthPassword: string | null;
 
   // Secret hints:
   llmApiKeyHint: string | null;
