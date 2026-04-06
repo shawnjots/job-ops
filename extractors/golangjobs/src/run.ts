@@ -7,10 +7,9 @@ import {
 import type { CreateJobInput } from "job-ops-shared/types/jobs";
 
 const GOLANG_JOBS_SUPABASE_URL = "https://mvjyjzestmcxxmmmakec.supabase.co";
-const GOLANG_JOBS_SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12anlqemVzdG1jeHhtbW1ha2VjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2NDMyNzksImV4cCI6MjA1OTIxOTI3OX0.AEucvhTZofaPFnPmnCMM2ptuE3Iy06_uao4n-6AmEgM";
 const GOLANG_JOBS_PAGE_SIZE = 200;
 const GOLANG_JOBS_MAX_PAGES = 10;
+const GOLANG_JOBS_SUPABASE_ANON_KEY_ENV = "GOLANG_JOBS_SUPABASE_ANON_KEY";
 
 export type GolangJobsWorkplaceType = "remote" | "hybrid" | "onsite";
 
@@ -35,6 +34,7 @@ export interface RunGolangJobsOptions {
   locations?: string[];
   workplaceTypes?: GolangJobsWorkplaceType[];
   maxJobsPerTerm?: number;
+  supabaseAnonKey?: string;
   onProgress?: (event: GolangJobsProgressEvent) => void;
   shouldCancel?: () => boolean;
   fetchImpl?: typeof fetch;
@@ -277,6 +277,7 @@ function mapGolangJobsRow(row: GolangJobsRow): CreateJobInput | null {
 async function fetchGolangJobsPage(args: {
   fetchImpl: typeof fetch;
   page: number;
+  supabaseAnonKey: string;
 }): Promise<GolangJobsRow[]> {
   const offset = args.page * GOLANG_JOBS_PAGE_SIZE;
   const url = new URL(`${GOLANG_JOBS_SUPABASE_URL}/rest/v1/jobs`);
@@ -291,8 +292,8 @@ async function fetchGolangJobsPage(args: {
 
   const response = await args.fetchImpl(url.toString(), {
     headers: {
-      apikey: GOLANG_JOBS_SUPABASE_ANON_KEY,
-      authorization: `Bearer ${GOLANG_JOBS_SUPABASE_ANON_KEY}`,
+      apikey: args.supabaseAnonKey,
+      authorization: `Bearer ${args.supabaseAnonKey}`,
       accept: "application/json",
     },
   });
@@ -309,13 +310,22 @@ async function fetchGolangJobsPage(args: {
   return payload as GolangJobsRow[];
 }
 
-async function fetchAllGolangJobs(
-  fetchImpl: typeof fetch,
-): Promise<GolangJobsRow[]> {
+async function fetchAllGolangJobs(args: {
+  fetchImpl: typeof fetch;
+  supabaseAnonKey: string;
+  shouldCancel?: () => boolean;
+}): Promise<GolangJobsRow[]> {
   const rows: GolangJobsRow[] = [];
 
   for (let page = 0; page < GOLANG_JOBS_MAX_PAGES; page += 1) {
-    const nextRows = await fetchGolangJobsPage({ fetchImpl, page });
+    if (args.shouldCancel?.()) {
+      break;
+    }
+    const nextRows = await fetchGolangJobsPage({
+      fetchImpl: args.fetchImpl,
+      page,
+      supabaseAnonKey: args.supabaseAnonKey,
+    });
     rows.push(...nextRows);
     if (nextRows.length < GOLANG_JOBS_PAGE_SIZE) {
       break;
@@ -349,6 +359,9 @@ export async function runGolangJobs(
   options: RunGolangJobsOptions = {},
 ): Promise<GolangJobsResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const supabaseAnonKey =
+    options.supabaseAnonKey ??
+    process.env[GOLANG_JOBS_SUPABASE_ANON_KEY_ENV]?.trim();
   const searchTerms =
     options.searchTerms && options.searchTerms.length > 0
       ? options.searchTerms
@@ -359,8 +372,20 @@ export async function runGolangJobs(
     options.selectedCountry,
   );
 
+  if (!supabaseAnonKey) {
+    return {
+      success: false,
+      jobs: [],
+      error: `Missing required environment variable: ${GOLANG_JOBS_SUPABASE_ANON_KEY_ENV}`,
+    };
+  }
+
   try {
-    const sourceRows = await fetchAllGolangJobs(fetchImpl);
+    const sourceRows = await fetchAllGolangJobs({
+      fetchImpl,
+      supabaseAnonKey,
+      shouldCancel: options.shouldCancel,
+    });
     const jobs: CreateJobInput[] = [];
     const seen = new Set<string>();
 

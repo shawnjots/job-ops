@@ -10,6 +10,8 @@ function createResponse(payload: unknown): Response {
 }
 
 describe("runGolangJobs", () => {
+  const supabaseAnonKey = "test-supabase-key";
+
   it("filters jobs by search term and maps core fields", async () => {
     const fetchMock = vi
       .fn()
@@ -51,6 +53,7 @@ describe("runGolangJobs", () => {
 
     const result = await runGolangJobs({
       searchTerms: ["backend engineer"],
+      supabaseAnonKey,
       fetchImpl: fetchMock,
     });
 
@@ -113,6 +116,7 @@ describe("runGolangJobs", () => {
       searchTerms: ["go engineer"],
       selectedCountry: "germany",
       locations: ["Berlin"],
+      supabaseAnonKey,
       fetchImpl: fetchMock,
     });
 
@@ -163,6 +167,7 @@ describe("runGolangJobs", () => {
     const result = await runGolangJobs({
       searchTerms: ["go engineer"],
       selectedCountry: "usa/ca",
+      supabaseAnonKey,
       fetchImpl: fetchMock,
     });
 
@@ -198,6 +203,7 @@ describe("runGolangJobs", () => {
     const result = await runGolangJobs({
       searchTerms: ["go engineer"],
       workplaceTypes: ["onsite"],
+      supabaseAnonKey,
       fetchImpl: fetchMock,
     });
 
@@ -253,10 +259,59 @@ describe("runGolangJobs", () => {
     const result = await runGolangJobs({
       searchTerms: ["go engineer"],
       maxJobsPerTerm: 1,
+      supabaseAnonKey,
       fetchImpl: fetchMock,
     });
 
     expect(result.success).toBe(true);
     expect(result.jobs).toHaveLength(1);
+  });
+
+  it("returns a clear error when the Supabase anon key is missing", async () => {
+    const result = await runGolangJobs({
+      searchTerms: ["go engineer"],
+      fetchImpl: vi.fn(),
+    });
+
+    expect(result).toEqual({
+      success: false,
+      jobs: [],
+      error:
+        "Missing required environment variable: GOLANG_JOBS_SUPABASE_ANON_KEY",
+    });
+  });
+
+  it("stops pagination when cancellation is requested before the next page", async () => {
+    let cancelled = false;
+    const fetchMock = vi.fn().mockImplementationOnce(async () => {
+      cancelled = true;
+      return createResponse(
+        Array.from({ length: 200 }, (_, index) => ({
+          id: `job-${index + 1}`,
+          title: "Go Engineer",
+          company: "Acme",
+          type: "full-time",
+          application_url: `https://example.com/apply-${index + 1}`,
+          slug: `golang-jobs-at-acme-job-${index + 1}`,
+          posted_at: "2026-03-14T14:55:59.542277+00:00",
+          description: "<p>Remote role.</p>",
+          requirements: [],
+          cities: {
+            name: "Remote",
+            country: "Ireland",
+          },
+        })),
+      );
+    });
+
+    const result = await runGolangJobs({
+      searchTerms: ["go engineer"],
+      supabaseAnonKey,
+      fetchImpl: fetchMock,
+      shouldCancel: () => cancelled,
+    });
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
