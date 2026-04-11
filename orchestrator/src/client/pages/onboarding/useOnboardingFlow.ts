@@ -577,7 +577,7 @@ export function useOnboardingFlow() {
           onboardingBasicAuthDecision: "skipped",
         });
         syncSettingsCache(nextSettings);
-        toast.success("Basic auth skipped for now");
+        toast.success("Authentication skipped for now");
         return true;
       } catch (error) {
         toast.error(
@@ -592,7 +592,7 @@ export function useOnboardingFlow() {
     }
 
     if (basicAuthChoice !== "enable") {
-      toast.info("Choose whether to enable basic auth or skip it for now");
+      toast.info("Choose whether to enable authentication or skip it for now");
       return false;
     }
 
@@ -601,7 +601,7 @@ export function useOnboardingFlow() {
     const normalizedPassword = basicAuthPassword.trim();
 
     if (!normalizedUser || !normalizedPassword) {
-      toast.info("Enter both a username and password to enable basic auth");
+      toast.info("Enter both a username and password to enable authentication");
       return false;
     }
 
@@ -615,13 +615,13 @@ export function useOnboardingFlow() {
       });
       syncSettingsCache(nextSettings);
       setValue("basicAuthPassword", "");
-      toast.success("Basic auth enabled");
+      toast.success("Authentication enabled");
       return true;
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to save basic auth credentials",
+          : "Failed to save authentication credentials",
       );
       return false;
     } finally {
@@ -681,7 +681,7 @@ export function useOnboardingFlow() {
             ? "Recheck resume"
             : "Check resume"
         : basicAuthChoice === "enable"
-          ? "Enable basic auth"
+          ? "Enable authentication"
           : basicAuthChoice === "skip"
             ? "Finish onboarding"
             : "Choose an option";
