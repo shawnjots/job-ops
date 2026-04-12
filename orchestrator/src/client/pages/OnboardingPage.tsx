@@ -1,8 +1,8 @@
 import { PageHeader, PageMain } from "@client/components/layout";
+import { useOnboardingRequirement } from "@client/hooks/useOnboardingRequirement";
 import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import type React from "react";
 import { Navigate } from "react-router-dom";
-import { useOnboardingRequirement } from "@/client/hooks/useOnboardingRequirement";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -94,7 +94,11 @@ export const OnboardingPage: React.FC = () => {
                     basicAuthUser={flow.watch("basicAuthUser")}
                     control={flow.control}
                     currentStep={flow.currentStep}
+                    hasSavedSearchTermsInSession={
+                      flow.hasSavedSearchTermsInSession
+                    }
                     isBusy={flow.isBusy}
+                    isGeneratingSearchTerms={flow.isGeneratingSearchTerms}
                     isImportingResume={flow.isImportingResume}
                     isResumeReady={flow.baseResumeValidation.valid}
                     isRxResumeSelfHosted={flow.isRxResumeSelfHosted}
@@ -105,6 +109,10 @@ export const OnboardingPage: React.FC = () => {
                     rxresumeApiKeyHint={flow.settings?.rxresumeApiKeyHint}
                     rxresumeUrl={flow.watch("rxresumeUrl")}
                     rxresumeValidation={flow.rxresumeValidation}
+                    searchTermDraft={flow.watch("searchTermDraft")}
+                    searchTerms={flow.watch("searchTerms")}
+                    searchTermsSource={flow.searchTermsSource}
+                    searchTermsStale={flow.searchTermsStale}
                     selectedProvider={flow.selectedProvider}
                     onBasicAuthChoiceChange={flow.setBasicAuthChoice}
                     onBasicAuthPasswordChange={(value) =>
@@ -114,6 +122,7 @@ export const OnboardingPage: React.FC = () => {
                       flow.setValue("basicAuthUser", value)
                     }
                     onImportResumeFile={flow.handleImportResumeFile}
+                    onRegenerateSearchTerms={flow.handleRegenerateSearchTerms}
                     onResumeSetupModeChange={flow.setResumeSetupMode}
                     onRxresumeApiKeyChange={(value) =>
                       flow.setValue("rxresumeApiKey", value)
@@ -124,10 +133,15 @@ export const OnboardingPage: React.FC = () => {
                     onRxresumeUrlChange={(value) =>
                       flow.setValue("rxresumeUrl", value)
                     }
-                    onTemplateResumeChange={(value) => {
-                      flow.setBaseResumeId(value);
-                      flow.setValue("rxresumeBaseResumeId", value);
-                    }}
+                    onSearchTermDraftChange={(value) =>
+                      flow.setValue("searchTermDraft", value)
+                    }
+                    onSearchTermsChange={(values) =>
+                      flow.setValue("searchTerms", values, {
+                        shouldDirty: true,
+                      })
+                    }
+                    onTemplateResumeChange={flow.handleTemplateResumeChange}
                   />
                 </CardContent>
 
