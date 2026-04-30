@@ -1,39 +1,46 @@
 import * as api from "@client/api";
 import {
-  DiscoveredPanel,
   FitAssessment,
   JobHeader,
   TailoredSummary,
 } from "@client/components";
+import { GhostwriterDrawer } from "@client/components/ghostwriter/GhostwriterDrawer";
+import { JobDescriptionMarkdown } from "@client/components/JobDescriptionMarkdown";
 import { JobDetailsEditDrawer } from "@client/components/JobDetailsEditDrawer";
-import { ReadyPanel } from "@client/components/ReadyPanel";
-import { TailoringEditor } from "@client/components/TailoringEditor";
+import { KbdHint } from "@client/components/KbdHint";
+import { OpenJobListingButton } from "@client/components/OpenJobListingButton";
+import { TailoringWorkspace } from "@client/components/tailoring/TailoringWorkspace";
 import {
   useMarkAsAppliedMutation,
   useSkipJobMutation,
 } from "@client/hooks/queries/useJobMutations";
 import { useProfile } from "@client/hooks/useProfile";
+import { useRescoreJob } from "@client/hooks/useRescoreJob";
 import { useSettings } from "@client/hooks/useSettings";
-import type { Job, JobListItem } from "@shared/types.js";
+import { uploadJobPdfFromFile } from "@client/lib/job-pdf-upload";
+import { getRenderableJobDescription } from "@client/lib/jobDescription";
+import { downloadJobPdf, openJobPdf } from "@client/lib/private-pdf";
+import type { Job, JobListItem, ResumeProjectCatalogItem } from "@shared/types.js";
 import {
   CheckCircle2,
   Copy,
+  Download,
   Edit2,
   ExternalLink,
   FileText,
+  FolderKanban,
   Loader2,
   MoreHorizontal,
   RefreshCcw,
   Save,
+  Sparkles,
+  Upload,
   XCircle,
 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { JobDescriptionMarkdown } from "@/client/components/JobDescriptionMarkdown";
-import { getRenderableJobDescription } from "@/client/lib/jobDescription";
-import { downloadJobPdf, openJobPdf } from "@/client/lib/private-pdf";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +52,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trackProductEvent } from "@/lib/analytics";
 import {
+  cn,
   copyTextToClipboard,
   formatJobForWebhook,
   safeFilenamePart,
@@ -60,79 +68,162 @@ interface JobDetailPanelProps {
   onPauseRefreshChange?: (paused: boolean) => void;
 }
 
+type InspectorTab = "brief" | "tailoring" | "apply";
+
+const tabCopy: Record<
+  InspectorTab,
+  { label: string; description: string }
+> = {
+  brief: {
+    label: "Brief",
+    description: "Read the role, fit, and raw job description.",
+  },
+  tailoring: {
+    label: "Tailoring",
+    description: "Shape the resume material for this job.",
+  },
+  apply: {
+    label: "Apply",
+    description: "Use the generated kit, Ghostwriter, and final actions.",
+  },
+};
+
+const getPrimaryAction = (job: Job): string => {
+  if (job.status === "processing") return "Processing";
+  if (job.status === "ready") return "Mark Applied";
+  if (job.status === "discovered") return "Start Tailoring";
+  if (job.status === "applied") return "Move to In Progress";
+  if (job.status === "in_progress") return "In Progress";
+  if (job.status === "skipped") return "Skipped";
+  if (job.status === "expired") return "Expired";
+  return "Review Job";
+};
+
+const getJobStageNote = (job: Job): string => {
+  if (job.status === "ready") {
+    return "Ready to apply. Review the brief, use the application kit, then mark it applied.";
+  }
+  if (job.status === "discovered") {
+    return "Newly discovered. Decide if it is worth tailoring, then generate the application kit.";
+  }
+  if (job.status === "processing") {
+    return "JobOps is analyzing this role and preparing the first draft.";
+  }
+  if (job.status === "applied") {
+    return "Already applied. Keep notes, follow-ups, and status changes here.";
+  }
+  if (job.status === "in_progress") {
+    return "Application is in progress. Use this space to keep the job context close.";
+  }
+  return "Archived or inactive job. The details remain available for reference.";
+};
+
+const Stat: React.FC<{ label: string; value?: string | null }> = ({
+  label,
+  value,
+}) => {
+  if (!value) return null;
+  return (
+    <div className="min-w-0 rounded-md border border-border/40 bg-muted/10 px-3 py-2">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+        {label}
+      </div>
+      <div className="mt-1 truncate text-xs text-foreground/85">{value}</div>
+    </div>
+  );
+};
+
 export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
-  activeTab,
+  activeTab: _activeTab,
   activeJobs,
   selectedJob,
   onSelectJobId,
   onJobUpdated,
   onPauseRefreshChange,
 }) => {
-  const [detailTab, setDetailTab] = useState<
-    "overview" | "tailoring" | "description"
-  >("overview");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("brief");
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [editedDescription, setEditedDescription] = useState("");
   const [isSavingDescription, setIsSavingDescription] = useState(false);
-  const [hasUnsavedTailoring, setHasUnsavedTailoring] = useState(false);
-  const [processingJobId, setProcessingJobId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const [isMoving, setIsMoving] = useState(false);
   const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false);
-  const saveTailoringRef = useRef<null | (() => Promise<void>)>(null);
+  const [catalog, setCatalog] = useState<ResumeProjectCatalogItem[]>([]);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const uploadPdfInputRef = useRef<HTMLInputElement | null>(null);
   const previousSelectedJobIdRef = useRef<string | null>(null);
   const markAsAppliedMutation = useMarkAsAppliedMutation();
   const skipJobMutation = useSkipJobMutation();
-
+  const { isRescoring, rescoreJob } = useRescoreJob(onJobUpdated);
   const { personName } = useProfile();
   const { renderMarkdownInJobDescriptions } = useSettings();
-  const openEditDetails = useCallback(() => {
-    window.setTimeout(() => setIsEditDetailsOpen(true), 0);
+
+  const jobLink = selectedJob
+    ? selectedJob.applicationLink || selectedJob.jobUrl
+    : "#";
+  const selectedPdfFilename = selectedJob
+    ? `${safeFilenamePart(personName || "Unknown")}_${safeFilenamePart(selectedJob.employer || "Unknown")}.pdf`
+    : "resume.pdf";
+  const description = useMemo(
+    () => getRenderableJobDescription(selectedJob?.jobDescription),
+    [selectedJob?.jobDescription],
+  );
+  const selectedProjectIds = useMemo(
+    () => selectedJob?.selectedProjectIds?.split(",").filter(Boolean) ?? [],
+    [selectedJob?.selectedProjectIds],
+  );
+  const selectedProjects = useMemo(
+    () =>
+      selectedProjectIds
+        .map((id) => catalog.find((project) => project.id === id)?.name ?? id)
+        .filter(Boolean),
+    [catalog, selectedProjectIds],
+  );
+
+  const loadCatalog = useCallback(async () => {
+    try {
+      setCatalog(await api.getResumeProjectsCatalog());
+    } catch {
+      setCatalog([]);
+    }
   }, []);
 
-  const handleTailoringDirtyChange = useCallback(
-    (isDirty: boolean) => {
-      setHasUnsavedTailoring(isDirty);
-      onPauseRefreshChange?.(isDirty);
-    },
-    [onPauseRefreshChange],
-  );
+  useEffect(() => {
+    void loadCatalog();
+  }, [loadCatalog]);
 
   useEffect(() => {
     const currentJobId = selectedJob?.id ?? null;
     if (previousSelectedJobIdRef.current === currentJobId) return;
     previousSelectedJobIdRef.current = currentJobId;
-    setHasUnsavedTailoring(false);
-    saveTailoringRef.current = null;
+    setInspectorTab("brief");
+    setIsEditingDescription(false);
+    setEditedDescription(selectedJob?.jobDescription || "");
+    setIsEditDetailsOpen(false);
     onPauseRefreshChange?.(false);
-  }, [selectedJob?.id, onPauseRefreshChange]);
+  }, [selectedJob, onPauseRefreshChange]);
+
+  useEffect(() => {
+    if (!selectedJob || isEditingDescription) return;
+    setEditedDescription(selectedJob.jobDescription || "");
+  }, [selectedJob, isEditingDescription]);
 
   useEffect(() => {
     return () => onPauseRefreshChange?.(false);
   }, [onPauseRefreshChange]);
 
-  const description = useMemo(() => {
-    return getRenderableJobDescription(selectedJob?.jobDescription);
-  }, [selectedJob]);
+  const handleJobMoved = useCallback(
+    (jobId: string) => {
+      const currentIndex = activeJobs.findIndex((job) => job.id === jobId);
+      const nextJob =
+        activeJobs[currentIndex + 1] || activeJobs[currentIndex - 1];
+      onSelectJobId(nextJob?.id ?? null);
+    },
+    [activeJobs, onSelectJobId],
+  );
 
-  useEffect(() => {
-    if (!selectedJob) {
-      setIsEditingDescription(false);
-      setEditedDescription("");
-      setIsEditDetailsOpen(false);
-      return;
-    }
-    setIsEditingDescription(false);
-    setEditedDescription(selectedJob.jobDescription || "");
-    setIsEditDetailsOpen(false);
-  }, [selectedJob?.id, selectedJob]);
-
-  useEffect(() => {
-    if (!selectedJob) return;
-    if (!isEditingDescription) {
-      setEditedDescription(selectedJob.jobDescription || "");
-    }
-  }, [selectedJob?.jobDescription, isEditingDescription, selectedJob]);
-
-  const handleSaveDescription = async () => {
+  const handleSaveDescription = useCallback(async () => {
     if (!selectedJob) return;
     try {
       setIsSavingDescription(true);
@@ -149,133 +240,105 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
     } finally {
       setIsSavingDescription(false);
     }
-  };
+  }, [editedDescription, onJobUpdated, selectedJob]);
 
-  const hasUnsavedDescription =
-    !!selectedJob &&
-    isEditingDescription &&
-    editedDescription !== (selectedJob.jobDescription || "");
-
-  const confirmAndSaveEdits = useCallback(
-    async ({
-      includeTailoring = true,
-    }: {
-      includeTailoring?: boolean;
-    } = {}) => {
-      const pendingDescription = hasUnsavedDescription;
-      const pendingTailoring = includeTailoring && hasUnsavedTailoring;
-
-      if (!pendingDescription && !pendingTailoring) return true;
-
-      const parts = [];
-      if (pendingDescription) parts.push("job description");
-      if (pendingTailoring) parts.push("tailoring changes");
-
-      const message = `You have unsaved ${parts.join(" and ")}. Save before generating the PDF?`;
-      if (!window.confirm(message)) return false;
-
-      try {
-        if (pendingDescription && selectedJob) {
-          await api.updateJob(selectedJob.id, {
-            jobDescription: editedDescription,
-          });
-        }
-
-        if (pendingTailoring) {
-          const saveTailoring = saveTailoringRef.current;
-          if (!saveTailoring) {
-            toast.error("Could not save tailoring changes");
-            return false;
-          }
-          await saveTailoring();
-        }
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to save changes";
-        toast.error(errorMessage);
-        return false;
-      }
-
-      return true;
-    },
-    [
-      editedDescription,
-      hasUnsavedDescription,
-      hasUnsavedTailoring,
-      selectedJob,
-    ],
-  );
-
-  const handleProcess = async () => {
+  const handleProcess = useCallback(async () => {
     if (!selectedJob) return;
     try {
-      const shouldProceed = await confirmAndSaveEdits({
-        includeTailoring: true,
-      });
-      if (!shouldProceed) return;
-
-      setProcessingJobId(selectedJob.id);
-
+      setIsProcessing(true);
       if (selectedJob.status === "ready") {
         await api.generateJobPdf(selectedJob.id);
+        toast.success("PDF regenerated");
         trackProductEvent("jobs_job_action_completed", {
           action: "generate_pdf",
           result: "success",
           from_status: selectedJob.status,
         });
-        toast.success("Resume regenerated successfully");
       } else {
         await api.processJob(selectedJob.id);
+        toast.success("Job moved to Ready", {
+          description: "Your tailored PDF has been generated.",
+        });
         trackProductEvent("jobs_job_action_completed", {
           action: "process_job",
           result: "success",
           from_status: selectedJob.status,
           to_status: "ready",
         });
-        toast.success("Resume generated successfully");
+        handleJobMoved(selectedJob.id);
       }
       await onJobUpdated();
     } catch (error) {
-      trackProductEvent("jobs_job_action_completed", {
-        action: selectedJob.status === "ready" ? "generate_pdf" : "process_job",
-        result: "error",
-        from_status: selectedJob.status,
-        ...(selectedJob.status === "ready" ? {} : { to_status: "ready" }),
-      });
       const message =
         error instanceof Error ? error.message : "Failed to process job";
       toast.error(message);
     } finally {
-      setProcessingJobId(null);
+      setIsProcessing(false);
     }
-  };
+  }, [handleJobMoved, onJobUpdated, selectedJob]);
 
-  const handleApply = async () => {
+  const handlePrimaryAction = useCallback(async () => {
     if (!selectedJob) return;
-    try {
-      await markAsAppliedMutation.mutateAsync(selectedJob.id);
-      trackProductEvent("jobs_job_action_completed", {
-        action: "mark_applied",
-        result: "success",
-        from_status: selectedJob.status,
-        to_status: "applied",
-      });
-      toast.success("Marked as applied");
-      await onJobUpdated();
-    } catch (error) {
-      trackProductEvent("jobs_job_action_completed", {
-        action: "mark_applied",
-        result: "error",
-        from_status: selectedJob.status,
-        to_status: "applied",
-      });
-      const message =
-        error instanceof Error ? error.message : "Failed to mark as applied";
-      toast.error(message);
+    if (selectedJob.status === "discovered") {
+      setInspectorTab("tailoring");
+      return;
     }
-  };
+    if (selectedJob.status === "ready") {
+      try {
+        setIsApplying(true);
+        await markAsAppliedMutation.mutateAsync(selectedJob.id);
+        trackProductEvent("jobs_job_action_completed", {
+          action: "mark_applied",
+          result: "success",
+          from_status: selectedJob.status,
+          to_status: "applied",
+        });
+        toast.success("Marked as applied", {
+          description: `${selectedJob.title} at ${selectedJob.employer}`,
+        });
+        handleJobMoved(selectedJob.id);
+        await onJobUpdated();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to mark as applied";
+        toast.error(message);
+      } finally {
+        setIsApplying(false);
+      }
+      return;
+    }
+    if (selectedJob.status === "applied") {
+      try {
+        setIsMoving(true);
+        await api.updateJob(selectedJob.id, { status: "in_progress" });
+        trackProductEvent("jobs_job_action_completed", {
+          action: "move_in_progress",
+          result: "success",
+          from_status: selectedJob.status,
+          to_status: "in_progress",
+        });
+        toast.success("Moved to in progress");
+        await onJobUpdated();
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to move to in progress";
+        toast.error(message);
+      } finally {
+        setIsMoving(false);
+      }
+      return;
+    }
+    setInspectorTab("brief");
+  }, [
+    handleJobMoved,
+    markAsAppliedMutation,
+    onJobUpdated,
+    selectedJob,
+  ]);
 
-  const handleSkip = async () => {
+  const handleSkip = useCallback(async () => {
     if (!selectedJob) return;
     try {
       await skipJobMutation.mutateAsync(selectedJob.id);
@@ -286,89 +349,13 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
         to_status: "skipped",
       });
       toast.message("Job skipped");
+      handleJobMoved(selectedJob.id);
       await onJobUpdated();
     } catch (error) {
-      trackProductEvent("jobs_job_action_completed", {
-        action: "skip",
-        result: "error",
-        from_status: selectedJob.status,
-        to_status: "skipped",
-      });
-      const message =
-        error instanceof Error ? error.message : "Failed to skip job";
+      const message = error instanceof Error ? error.message : "Failed to skip";
       toast.error(message);
     }
-  };
-
-  const handleMoveToInProgress = async () => {
-    if (!selectedJob) return;
-    try {
-      await api.updateJob(selectedJob.id, { status: "in_progress" });
-      trackProductEvent("jobs_job_action_completed", {
-        action: "move_in_progress",
-        result: "success",
-        from_status: selectedJob.status,
-        to_status: "in_progress",
-      });
-      toast.success("Moved to in progress");
-      await onJobUpdated();
-    } catch (error) {
-      trackProductEvent("jobs_job_action_completed", {
-        action: "move_in_progress",
-        result: "error",
-        from_status: selectedJob.status,
-        to_status: "in_progress",
-      });
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to move to in progress";
-      toast.error(message);
-    }
-  };
-
-  const handleCopyInfo = async () => {
-    if (!selectedJob) return;
-    try {
-      await copyTextToClipboard(formatJobForWebhook(selectedJob));
-      toast.success("Copied job info", {
-        description: "Webhook payload copied to clipboard.",
-      });
-    } catch {
-      toast.error("Could not copy job info");
-    }
-  };
-
-  const handleJobMoved = useCallback(
-    (jobId: string) => {
-      const currentIndex = activeJobs.findIndex((job) => job.id === jobId);
-      const nextJob =
-        activeJobs[currentIndex + 1] || activeJobs[currentIndex - 1];
-      onSelectJobId(nextJob?.id ?? null);
-    },
-    [activeJobs, onSelectJobId],
-  );
-
-  const selectedHasPdf = !!selectedJob?.pdfPath;
-  const selectedJobLink = selectedJob
-    ? selectedJob.applicationLink || selectedJob.jobUrl
-    : "#";
-  const canApply = selectedJob?.status === "ready";
-  const canMoveToInProgress = selectedJob?.status === "applied";
-  const canProcess = selectedJob
-    ? ["discovered", "ready"].includes(selectedJob.status)
-    : false;
-  const canSkip = selectedJob
-    ? ["discovered", "ready"].includes(selectedJob.status)
-    : false;
-  const showReadyPdf = activeTab === "ready";
-  const showGeneratePdf = activeTab === "discovered";
-  const isProcessingSelected = selectedJob
-    ? processingJobId === selectedJob.id || selectedJob.status === "processing"
-    : false;
-  const selectedPdfFilename = selectedJob
-    ? `${safeFilenamePart(personName || "Unknown")}_${safeFilenamePart(selectedJob.employer || "Unknown")}.pdf`
-    : "resume.pdf";
+  }, [handleJobMoved, onJobUpdated, selectedJob, skipJobMutation]);
 
   const handleOpenPdf = useCallback(() => {
     if (!selectedJob) return;
@@ -388,411 +375,448 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
     });
   }, [selectedJob, selectedPdfFilename]);
 
-  if (activeTab === "discovered") {
-    return (
-      <DiscoveredPanel
-        job={selectedJob}
-        onJobUpdated={onJobUpdated}
-        onJobMoved={handleJobMoved}
-        onTailoringDirtyChange={handleTailoringDirtyChange}
-      />
-    );
-  }
-
-  if (activeTab === "ready") {
-    return (
-      <ReadyPanel
-        job={selectedJob}
-        onJobUpdated={onJobUpdated}
-        onJobMoved={handleJobMoved}
-        onTailoringDirtyChange={handleTailoringDirtyChange}
-      />
-    );
-  }
+  const handleUploadPdf = useCallback(
+    async (file: File) => {
+      if (!selectedJob) return;
+      try {
+        setIsUploadingPdf(true);
+        await uploadJobPdfFromFile(selectedJob.id, file);
+        toast.success(selectedJob.pdfPath ? "PDF replaced" : "PDF attached");
+        await onJobUpdated();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to upload PDF";
+        toast.error(message);
+      } finally {
+        setIsUploadingPdf(false);
+        if (uploadPdfInputRef.current) {
+          uploadPdfInputRef.current.value = "";
+        }
+      }
+    },
+    [onJobUpdated, selectedJob],
+  );
 
   if (!selectedJob) {
     return (
-      <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-1 text-center">
+      <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 text-center">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-border/50 bg-muted/20">
+          <FileText className="h-5 w-5 text-muted-foreground" />
+        </div>
         <div className="text-sm font-medium text-muted-foreground">
           No job selected
         </div>
-        <p className="text-xs text-muted-foreground/70">
-          Select a job to view details
+        <p className="max-w-[220px] text-xs text-muted-foreground/70">
+          Select a job to see the brief, tailoring, and application kit.
         </p>
       </div>
     );
   }
 
+  const primaryBusy =
+    isProcessing ||
+    isApplying ||
+    isMoving ||
+    selectedJob.status === "processing";
+  const canGenerate = ["discovered", "ready"].includes(selectedJob.status);
+  const canSkip = ["discovered", "ready"].includes(selectedJob.status);
+
   return (
-    <div className="space-y-3">
-      <JobHeader
-        job={selectedJob}
-        onCheckSponsor={async () => {
-          try {
+    <div className="flex min-h-[520px] flex-col gap-4">
+      <div className="space-y-4">
+        <JobHeader
+          job={selectedJob}
+          onCheckSponsor={async () => {
             await api.checkSponsor(selectedJob.id);
-            trackProductEvent("jobs_job_action_completed", {
-              action: "check_sponsor",
-              result: "success",
-              from_status: selectedJob.status,
-            });
             await onJobUpdated();
-          } catch (error) {
-            trackProductEvent("jobs_job_action_completed", {
-              action: "check_sponsor",
-              result: "error",
-              from_status: selectedJob.status,
-            });
-            throw error;
-          }
-        }}
-      />
+          }}
+        />
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Button
-          asChild
-          size="sm"
-          variant="ghost"
-          className="h-8 gap-1.5 text-xs"
-        >
-          <a href={selectedJobLink} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-3.5 w-3.5" />
-            View
-          </a>
-        </Button>
-
-        {showReadyPdf &&
-          (selectedHasPdf ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 text-xs"
-              onClick={handleOpenPdf}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              PDF
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 text-xs"
-              disabled
-            >
-              <FileText className="h-3.5 w-3.5" />
-              PDF
-            </Button>
-          ))}
-
-        {showGeneratePdf && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs"
-            onClick={handleProcess}
-            disabled={!canProcess || isProcessingSelected}
-          >
-            {isProcessingSelected ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCcw className="h-3.5 w-3.5" />
-            )}
-            {isProcessingSelected ? "Generating..." : "Generate"}
-          </Button>
-        )}
-
-        {canApply && (
-          <Button
-            size="sm"
-            className="h-8 gap-1.5 text-xs bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 border border-emerald-500/30"
-            onClick={handleApply}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Applied
-          </Button>
-        )}
-
-        {canMoveToInProgress && (
-          <Button
-            size="sm"
-            className="h-8 gap-1.5 text-xs bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 border border-cyan-500/30"
-            onClick={handleMoveToInProgress}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Move to In Progress
-          </Button>
-        )}
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="icon" variant="ghost" aria-label="More actions">
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {canProcess && !showGeneratePdf && (
-              <DropdownMenuItem
-                onSelect={() => void handleProcess()}
-                disabled={isProcessingSelected}
+        <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                Next step
+              </div>
+              <p className="mt-1 text-xs text-foreground/80">
+                {getJobStageNote(selectedJob)}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                size="sm"
+                onClick={() => void handlePrimaryAction()}
+                disabled={primaryBusy || selectedJob.status === "processing"}
+                className="h-9 gap-1.5 px-3 text-xs"
               >
-                <RefreshCcw className="mr-2 h-4 w-4" />
-                {isProcessingSelected
-                  ? "Processing..."
-                  : selectedJob.status === "ready"
-                    ? "Regenerate PDF"
-                    : "Generate PDF"}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              onSelect={() => {
-                setDetailTab("description");
-                setIsEditingDescription(true);
-              }}
-            >
-              <Edit2 className="mr-2 h-4 w-4" />
-              Edit description
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={openEditDetails}>
-              <Edit2 className="mr-2 h-4 w-4" />
-              Edit details
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => void handleCopyInfo()}>
-              <Copy className="mr-2 h-4 w-4" />
-              Copy info
-            </DropdownMenuItem>
-            {selectedHasPdf && (
-              <>
-                {!showReadyPdf && (
-                  <DropdownMenuItem onSelect={handleOpenPdf}>
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    View PDF
-                  </DropdownMenuItem>
+                {primaryBusy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : selectedJob.status === "discovered" ? (
+                  <Sparkles className="h-3.5 w-3.5" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                <DropdownMenuItem onSelect={handleDownloadPdf}>
-                  <FileText className="mr-2 h-4 w-4" />
-                  Download PDF
-                </DropdownMenuItem>
-              </>
-            )}
-            {canSkip && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => void handleSkip()}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Skip job
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <Tabs
-        value={detailTab}
-        onValueChange={(value) => setDetailTab(value as typeof detailTab)}
-      >
-        <TabsList className="h-auto flex-wrap justify-start gap-1 text-xs">
-          <TabsTrigger value="overview" className="text-xs">
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="tailoring" className="text-xs">
-            Tailoring
-          </TabsTrigger>
-          <TabsTrigger value="description" className="text-xs">
-            Description
-          </TabsTrigger>
-        </TabsList>
+                {getPrimaryAction(selectedJob)}
+                {selectedJob.status === "ready" ? (
+                  <KbdHint shortcut="a" className="ml-1" />
+                ) : null}
+              </Button>
 
-        <TabsContent value="overview" className="space-y-3 pt-2">
-          <FitAssessment job={selectedJob} />
-          <TailoredSummary job={selectedJob} />
-
-          <div className="grid gap-2 text-xs sm:grid-cols-2">
-            <div>
-              <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">
-                Discipline
-              </div>
-              <div className="text-foreground/80">
-                {selectedJob.disciplines || "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">
-                Function
-              </div>
-              <div className="text-foreground/80">
-                {selectedJob.jobFunction || "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">
-                Level
-              </div>
-              <div className="text-foreground/80">
-                {selectedJob.jobLevel || "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] text-muted-foreground/70 uppercase tracking-wide">
-                Type
-              </div>
-              <div className="text-foreground/80">
-                {selectedJob.jobType || "-"}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <button
-              type="button"
-              className="w-full text-left rounded border border-border/30 bg-muted/5 px-2.5 py-2 text-[11px] text-muted-foreground/80 line-clamp-4 whitespace-pre-wrap leading-relaxed hover:bg-muted/10 transition-colors"
-              onClick={() => setDetailTab("description")}
-            >
-              {description}
-            </button>
-            <div className="text-center">
-              <button
-                type="button"
-                className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                onClick={() => setDetailTab("description")}
-              >
-                View full description
-              </button>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="tailoring" className="pt-3">
-          <TailoringEditor
-            job={selectedJob}
-            onUpdate={onJobUpdated}
-            onDirtyChange={handleTailoringDirtyChange}
-            onRegisterSave={(save) => {
-              saveTailoringRef.current = save;
-            }}
-            onBeforeGenerate={() =>
-              confirmAndSaveEdits({ includeTailoring: false })
-            }
-          />
-        </TabsContent>
-
-        <TabsContent value="description" className="space-y-3 pt-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Job description
-            </div>
-            <div className="flex items-center gap-1">
-              {!isEditingDescription ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsEditingDescription(true)}
-                  className="h-8 px-2 text-xs"
-                >
-                  <Edit2 className="mr-1.5 h-3.5 w-3.5" />
-                  Edit
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setIsEditingDescription(false);
-                      setEditedDescription(selectedJob.jobDescription || "");
-                    }}
-                    className="h-8 px-2 text-xs text-muted-foreground"
-                    disabled={isSavingDescription}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleSaveDescription}
-                    className="h-8 px-3 text-xs"
-                    disabled={isSavingDescription}
-                  >
-                    {isSavingDescription ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    Save Changes
-                  </Button>
-                </>
-              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8"
-                    aria-label="Description actions"
+                    className="h-9 w-9"
+                    aria-label="More actions"
                   >
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onSelect={() => setIsEditDetailsOpen(true)}>
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Edit details
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() => {
-                      void copyTextToClipboard(
-                        selectedJob.jobDescription || "",
-                      );
-                      toast.success("Copied raw description");
+                      setInspectorTab("brief");
+                      setIsEditingDescription(true);
+                    }}
+                  >
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Edit job description
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      void copyTextToClipboard(formatJobForWebhook(selectedJob));
+                      toast.success("Copied job info");
                     }}
                   >
                     <Copy className="mr-2 h-4 w-4" />
-                    Copy raw text
+                    Copy job info
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => rescoreJob(selectedJob.id)}
+                    disabled={isRescoring}
+                  >
+                    <RefreshCcw
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        isRescoring && "animate-spin",
+                      )}
+                    />
+                    {isRescoring ? "Recalculating..." : "Recalculate match"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {canGenerate && (
+                    <DropdownMenuItem
+                      onSelect={() => void handleProcess()}
+                      disabled={isProcessing}
+                    >
+                      <RefreshCcw
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          isProcessing && "animate-spin",
+                        )}
+                      />
+                      {selectedJob.status === "ready"
+                        ? "Regenerate PDF"
+                        : "Generate PDF"}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    onSelect={() => uploadPdfInputRef.current?.click()}
+                    disabled={isUploadingPdf}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {isUploadingPdf
+                      ? "Uploading PDF..."
+                      : selectedJob.pdfPath
+                        ? "Replace PDF"
+                        : "Upload PDF"}
+                  </DropdownMenuItem>
+                  {selectedJob.pdfPath && (
+                    <>
+                      <DropdownMenuItem onSelect={handleOpenPdf}>
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        View PDF
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={handleDownloadPdf}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download PDF
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canSkip && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => void handleSkip()}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <XCircle className="mr-2 h-4 w-4" />
+                        Skip job
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-3 text-sm text-muted-foreground">
-            {isEditingDescription ? (
-              <div className="space-y-3">
+      <Tabs
+        value={inspectorTab}
+        onValueChange={(value) => setInspectorTab(value as InspectorTab)}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <TabsList className="grid h-auto grid-cols-3 gap-1 rounded-lg bg-muted/20 p-1 text-xs">
+          {Object.entries(tabCopy).map(([value, copy]) => (
+            <TabsTrigger key={value} value={value} className="text-xs">
+              {copy.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <div className="mt-2 text-[10px] text-muted-foreground/70">
+          {tabCopy[inspectorTab].description}
+        </div>
+
+        <TabsContent value="brief" className="min-h-0 flex-1 space-y-4 pt-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Stat label="Location" value={selectedJob.location} />
+            <Stat label="Salary" value={selectedJob.salary} />
+            <Stat label="Level" value={selectedJob.jobLevel} />
+            <Stat label="Function" value={selectedJob.jobFunction} />
+            <Stat label="Type" value={selectedJob.jobType} />
+            <Stat label="Discipline" value={selectedJob.disciplines} />
+          </div>
+
+          <FitAssessment job={selectedJob} />
+          <TailoredSummary job={selectedJob} />
+
+          <div className="rounded-lg border border-border/50 bg-muted/10">
+            <div className="flex items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
+              <div>
+                <div className="text-xs font-semibold text-foreground/90">
+                  Job description
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">
+                  The source material for deciding, tailoring, and applying.
+                </p>
+              </div>
+              <div className="flex gap-1">
+                {!isEditingDescription ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => {
+                        void copyTextToClipboard(
+                          selectedJob.jobDescription || "",
+                        );
+                        toast.success("Copied raw description");
+                      }}
+                    >
+                      <Copy className="mr-1.5 h-3.5 w-3.5" />
+                      Copy
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => setIsEditingDescription(true)}
+                    >
+                      <Edit2 className="mr-1.5 h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => {
+                        setIsEditingDescription(false);
+                        setEditedDescription(selectedJob.jobDescription || "");
+                      }}
+                      disabled={isSavingDescription}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      onClick={() => void handleSaveDescription()}
+                      disabled={isSavingDescription}
+                    >
+                      {isSavingDescription ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      Save
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="max-h-[420px] overflow-y-auto p-3 text-sm text-muted-foreground">
+              {isEditingDescription ? (
                 <Textarea
                   value={editedDescription}
                   onChange={(event) => setEditedDescription(event.target.value)}
-                  className="min-h-[400px] font-mono text-sm leading-relaxed focus-visible:ring-1"
+                  className="min-h-[360px] font-mono text-sm leading-relaxed focus-visible:ring-1"
                   placeholder="Enter job description..."
                 />
-                <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setIsEditingDescription(false);
-                      setEditedDescription(selectedJob.jobDescription || "");
-                    }}
-                    disabled={isSavingDescription}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSaveDescription}
-                    disabled={isSavingDescription}
-                  >
-                    {isSavingDescription ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                    )}
-                    Save Description
-                  </Button>
+              ) : renderMarkdownInJobDescriptions ? (
+                <JobDescriptionMarkdown description={description} />
+              ) : (
+                <div className="whitespace-pre-wrap leading-relaxed">
+                  {description}
                 </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent
+          value="tailoring"
+          className="min-h-0 flex-1 space-y-4 pt-3"
+        >
+          <TailoringWorkspace
+            mode="editor"
+            job={selectedJob}
+            onUpdate={onJobUpdated}
+            onDirtyChange={onPauseRefreshChange}
+          />
+        </TabsContent>
+
+        <TabsContent value="apply" className="min-h-0 flex-1 space-y-4 pt-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <GhostwriterDrawer
+              job={selectedJob}
+              triggerClassName="h-10 w-full justify-center gap-1.5 px-2 text-xs"
+            />
+            <OpenJobListingButton
+              href={jobLink}
+              className="h-10 w-full px-2 text-xs"
+              shortcut="o"
+            />
+            <Button
+              variant="outline"
+              className="h-10 w-full gap-1.5 px-2 text-xs"
+              onClick={handleDownloadPdf}
+              disabled={!selectedJob.pdfPath}
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download PDF
+              <KbdHint shortcut="d" className="ml-auto" />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10 w-full gap-1.5 px-2 text-xs"
+              onClick={handleOpenPdf}
+              disabled={!selectedJob.pdfPath}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              View PDF
+            </Button>
+          </div>
+
+          <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground/90">
+              <FolderKanban className="h-3.5 w-3.5 text-muted-foreground" />
+              Selected projects
+            </div>
+            {selectedProjects.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedProjects.map((project) => (
+                  <span
+                    key={project}
+                    className="rounded-md border border-border/50 bg-background/50 px-2 py-1 text-[11px] text-muted-foreground"
+                  >
+                    {project}
+                  </span>
+                ))}
               </div>
-            ) : renderMarkdownInJobDescriptions ? (
-              <JobDescriptionMarkdown description={description} />
             ) : (
-              <div className="whitespace-pre-wrap leading-relaxed">
-                {description}
-              </div>
+              <p className="text-xs text-muted-foreground/70">
+                No projects selected yet. Use Tailoring to choose the evidence
+                for this role.
+              </p>
             )}
+          </div>
+
+          <div className="rounded-lg border border-border/50 bg-muted/10 p-3">
+            <div className="mb-3 text-xs font-semibold text-foreground/90">
+              Application kit
+            </div>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-3">
+                <span>Tailored summary</span>
+                <span className="text-foreground/80">
+                  {selectedJob.tailoredSummary ? "Ready" : "Missing"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Tailored skills</span>
+                <span className="text-foreground/80">
+                  {selectedJob.tailoredSkills ? "Ready" : "Missing"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>PDF</span>
+                <span className="text-foreground/80">
+                  {selectedJob.pdfPath ? "Attached" : "Not generated"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {canGenerate && (
+              <Button
+                variant="outline"
+                className="h-10 flex-1 gap-1.5 text-xs"
+                onClick={() => void handleProcess()}
+                disabled={isProcessing}
+              >
+                {isProcessing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                )}
+                {selectedJob.status === "ready"
+                  ? "Regenerate PDF"
+                  : "Generate PDF"}
+              </Button>
+            )}
+            <Button
+              className={cn(
+                buttonVariants({ variant: "default" }),
+                "h-10 flex-1 gap-1.5 text-xs",
+              )}
+              onClick={() => void handlePrimaryAction()}
+              disabled={
+                primaryBusy ||
+                !["ready", "applied", "discovered"].includes(
+                  selectedJob.status,
+                )
+              }
+            >
+              {primaryBusy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+              {getPrimaryAction(selectedJob)}
+            </Button>
           </div>
         </TabsContent>
       </Tabs>
@@ -802,6 +826,19 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
         onOpenChange={setIsEditDetailsOpen}
         job={selectedJob}
         onJobUpdated={onJobUpdated}
+      />
+
+      <input
+        ref={uploadPdfInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) {
+            void handleUploadPdf(file);
+          }
+        }}
       />
     </div>
   );
