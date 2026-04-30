@@ -82,29 +82,27 @@ const tabCopy: Record<
     label: string;
     description: string;
     dotClassName: string;
-    activeClassName: string;
+    selectedClassName: string;
   }
 > = {
   brief: {
     label: "Brief",
     description: "Read the role, fit, and job description.",
     dotClassName: "bg-sky-500/70",
-    activeClassName:
-      "data-[state=active]:border-sky-400/35 data-[state=active]:bg-sky-500/10 data-[state=active]:text-sky-100",
+    selectedClassName: "!border-sky-400/65 !bg-sky-500/20 !text-sky-100",
   },
   tailoring: {
     label: "Tailoring",
     description: "Shape the resume material for this job.",
     dotClassName: "bg-amber-500/70",
-    activeClassName:
-      "data-[state=active]:border-amber-400/35 data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-100",
+    selectedClassName: "!border-amber-400/65 !bg-amber-500/20 !text-amber-100",
   },
   apply: {
     label: "Apply",
     description: "Use the generated kit, Ghostwriter, and final actions.",
     dotClassName: "bg-emerald-500/70",
-    activeClassName:
-      "data-[state=active]:border-emerald-400/35 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-100",
+    selectedClassName:
+      "!border-emerald-400/65 !bg-emerald-500/20 !text-emerald-100",
   },
 };
 
@@ -732,13 +730,14 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
         <TooltipProvider delayDuration={0}>
           <TabsList className="grid h-auto grid-cols-3 gap-1 rounded-lg border border-border/35 bg-background/30 p-1 text-xs">
             {Object.entries(tabCopy).map(([value, copy]) => {
+              const isSelected = inspectorTab === value;
               const trigger = (
                 <TabsTrigger
                   key={value}
                   value={value}
                   className={cn(
                     "h-9 gap-2 border border-transparent text-xs text-muted-foreground data-[state=active]:shadow-none",
-                    copy.activeClassName,
+                    isSelected && copy.selectedClassName,
                   )}
                 >
                   <span
