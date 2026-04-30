@@ -47,6 +47,7 @@ Global settings affecting generations:
 - `Formality`
 - `Constraints`
 - `Do-not-use terms`
+- `Use Stop Slop for Ghostwriter`
 
 Ghostwriter follows the output language you request in your prompt. For example, `Ecris en français` should produce a French reply.
 
@@ -59,12 +60,15 @@ less reliable, but reset restores the default template quickly.
 
 `Do-not-use terms` are passed as guidance in the prompt. They are not enforced by a hard post-generation filter, so the model should avoid them but may still use them occasionally.
 
+`Use Stop Slop for Ghostwriter` adds extra Ghostwriter-only instructions based on the Stop Slop skill. When enabled, Ghostwriter revises toward direct active voice, cuts filler and formulaic AI phrasing, avoids vague claims, and removes em dashes. It does not change resume tailoring.
+
 Defaults:
 
 - Tone: `professional`
 - Formality: `medium`
 - Constraints: empty
 - Do-not-use terms: empty
+- Use Stop Slop for Ghostwriter: disabled
 
 ### Context and safety model
 

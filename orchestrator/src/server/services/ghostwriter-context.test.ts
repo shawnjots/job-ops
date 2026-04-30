@@ -212,6 +212,22 @@ describe("buildJobChatPromptContext", () => {
     expect(context.systemPrompt).toContain("{{unknownToken}}");
   });
 
+  it("adds Stop Slop instructions when enabled", async () => {
+    const job = createJob({ id: "job-ctx-stop-slop" });
+    vi.mocked(getJobById).mockResolvedValue(job);
+    vi.mocked(getProfile).mockResolvedValue({});
+    vi.mocked(getSetting).mockImplementation(async (key) =>
+      key === "ghostwriterStopSlopEnabled" ? "1" : null,
+    );
+
+    const context = await buildJobChatPromptContext(job.id);
+
+    expect(context.systemPrompt).toContain(
+      "Stop Slop revision rules for Ghostwriter prose",
+    );
+    expect(context.systemPrompt).toContain("Avoid formulaic structures");
+  });
+
   it("throws not found for unknown job", async () => {
     vi.mocked(getJobById).mockResolvedValue(null);
 

@@ -84,6 +84,7 @@ const DEFAULT_FORM_VALUES: UpdateSettingsInput = {
   chatStyleFormality: "",
   chatStyleConstraints: "",
   chatStyleDoNotUse: "",
+  ghostwriterStopSlopEnabled: null,
   chatStyleSummaryMaxWords: null,
   chatStyleMaxKeywordsPerSkill: null,
   chatStyleLanguageMode: null,
@@ -291,6 +292,7 @@ const SECTION_FIELD_MAP: Record<
     "chatStyleFormality",
     "chatStyleConstraints",
     "chatStyleDoNotUse",
+    "ghostwriterStopSlopEnabled",
     "chatStyleLanguageMode",
     "chatStyleManualLanguage",
   ],
@@ -377,6 +379,7 @@ const NULL_SETTINGS_PAYLOAD: UpdateSettingsInput = {
   chatStyleFormality: null,
   chatStyleConstraints: null,
   chatStyleDoNotUse: null,
+  ghostwriterStopSlopEnabled: null,
   chatStyleSummaryMaxWords: null,
   chatStyleMaxKeywordsPerSkill: null,
   chatStyleLanguageMode: null,
@@ -427,6 +430,7 @@ const mapSettingsToForm = (data: AppSettings): UpdateSettingsInput => ({
   chatStyleFormality: data.chatStyleFormality.override ?? "",
   chatStyleConstraints: data.chatStyleConstraints.override ?? "",
   chatStyleDoNotUse: data.chatStyleDoNotUse.override ?? "",
+  ghostwriterStopSlopEnabled: data.ghostwriterStopSlopEnabled.override,
   chatStyleSummaryMaxWords: data.chatStyleSummaryMaxWords.override ?? null,
   chatStyleMaxKeywordsPerSkill:
     data.chatStyleMaxKeywordsPerSkill.override ?? null,
@@ -563,6 +567,10 @@ const getDerivedSettings = (settings: AppSettings | null) => {
       doNotUse: {
         effective: settings?.chatStyleDoNotUse?.value ?? "",
         default: settings?.chatStyleDoNotUse?.default ?? "",
+      },
+      stopSlopEnabled: {
+        effective: settings?.ghostwriterStopSlopEnabled?.value ?? false,
+        default: settings?.ghostwriterStopSlopEnabled?.default ?? false,
       },
       languageMode: {
         effective: settings?.chatStyleLanguageMode?.value ?? "manual",
@@ -1103,6 +1111,10 @@ export const SettingsPage: React.FC = () => {
         chatStyleFormality: normalizeString(data.chatStyleFormality),
         chatStyleConstraints: normalizeString(data.chatStyleConstraints),
         chatStyleDoNotUse: normalizeString(data.chatStyleDoNotUse),
+        ghostwriterStopSlopEnabled: nullIfSame(
+          data.ghostwriterStopSlopEnabled,
+          chat.stopSlopEnabled.default,
+        ),
         chatStyleSummaryMaxWords: Number.isNaN(data.chatStyleSummaryMaxWords)
           ? null
           : (data.chatStyleSummaryMaxWords ?? null),

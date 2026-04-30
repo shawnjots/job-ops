@@ -144,12 +144,18 @@ describe("settingsRegistry helpers", () => {
       expect(settingsRegistry.showSponsorInfo.parse("true")).toBe(true);
       expect(settingsRegistry.showSponsorInfo.parse("0")).toBe(false);
       expect(settingsRegistry.showSponsorInfo.parse("false")).toBe(false);
+      expect(settingsRegistry.showSponsorInfo.parse("2")).toBeNull();
+      expect(settingsRegistry.showSponsorInfo.parse("yes")).toBeNull();
       expect(settingsRegistry.showSponsorInfo.parse("")).toBeNull();
       expect(settingsRegistry.showSponsorInfo.parse(undefined)).toBeNull();
       expect(settingsRegistry.renderMarkdownInJobDescriptions.parse("1")).toBe(
         true,
       );
       expect(settingsRegistry.renderMarkdownInJobDescriptions.parse("0")).toBe(
+        false,
+      );
+      expect(settingsRegistry.ghostwriterStopSlopEnabled.parse("1")).toBe(true);
+      expect(settingsRegistry.ghostwriterStopSlopEnabled.parse("0")).toBe(
         false,
       );
     });
@@ -165,6 +171,12 @@ describe("settingsRegistry helpers", () => {
       expect(
         settingsRegistry.renderMarkdownInJobDescriptions.serialize(false),
       ).toBe("0");
+      expect(settingsRegistry.ghostwriterStopSlopEnabled.serialize(true)).toBe(
+        "1",
+      );
+      expect(settingsRegistry.ghostwriterStopSlopEnabled.serialize(false)).toBe(
+        "0",
+      );
     });
   });
 

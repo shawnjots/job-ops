@@ -408,7 +408,8 @@ describe("design resume service", () => {
       }),
     ).rejects.toThrow("db insert failed");
 
-    expect(fsMocks.unlink).toHaveBeenCalledWith(
+    const deletedPath = fsMocks.unlink.mock.calls[0]?.[0];
+    expect(deletedPath?.replace(/\\/g, "/")).toBe(
       "/tmp/job-ops-test/design-resume/assets/asset-1.png",
     );
   });

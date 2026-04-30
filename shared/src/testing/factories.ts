@@ -189,6 +189,11 @@ export const createAppSettings = (
     default: getDefaultPromptTemplate("ghostwriterSystemPromptTemplate"),
     override: null,
   },
+  ghostwriterStopSlopEnabled: {
+    value: false,
+    default: false,
+    override: null,
+  },
   tailoringPromptTemplate: {
     value: getDefaultPromptTemplate("tailoringPromptTemplate"),
     default: getDefaultPromptTemplate("tailoringPromptTemplate"),

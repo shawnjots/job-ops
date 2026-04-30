@@ -716,6 +716,40 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("saves the Ghostwriter Stop Slop toggle through the settings page", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue(baseSettings);
+    vi.mocked(api.updateSettings).mockResolvedValue(
+      createAppSettings({
+        ghostwriterStopSlopEnabled: {
+          value: true,
+          default: false,
+          override: true,
+        },
+      }),
+    );
+
+    renderPage();
+    await openWritingStyleSection();
+
+    const stopSlopCheckbox = screen.getByLabelText(
+      /use stop slop for ghostwriter/i,
+    );
+    expect(stopSlopCheckbox).not.toBeChecked();
+
+    fireEvent.click(stopSlopCheckbox);
+
+    const saveButton = getSaveButton();
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalled());
+    expect(api.updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ghostwriterStopSlopEnabled: true,
+      }),
+    );
+  });
+
   it("enables save button when the authentication toggle is changed", async () => {
     vi.mocked(api.getSettings).mockResolvedValue(baseSettings);
     renderPage();

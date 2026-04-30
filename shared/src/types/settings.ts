@@ -176,6 +176,7 @@ export interface AppSettings {
   blockedCompanyKeywords: Resolved<string[]>;
   scoringInstructions: Resolved<string>;
   ghostwriterSystemPromptTemplate: Resolved<string>;
+  ghostwriterStopSlopEnabled: Resolved<boolean>;
   tailoringPromptTemplate: Resolved<string>;
   scoringPromptTemplate: Resolved<string>;
   searchCities: Resolved<string>;

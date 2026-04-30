@@ -1,8 +1,10 @@
 import { badRequest, notFound } from "@infra/errors";
 import { logger } from "@infra/logger";
 import { sanitizeUnknown } from "@infra/sanitize";
+import { settingsRegistry } from "@shared/settings-registry";
 import type { Job, ResumeProfile } from "@shared/types";
 import * as jobsRepo from "../repositories/jobs";
+import * as settingsRepo from "../repositories/settings";
 import {
   getWritingLanguageLabel,
   resolveWritingOutputLanguage,
@@ -32,6 +34,21 @@ const MAX_SKILLS = 18;
 const MAX_PROJECTS = 6;
 const MAX_EXPERIENCE = 5;
 const MAX_ITEM_TEXT = 320;
+
+const STOP_SLOP_GHOSTWRITER_PROMPT = `
+Stop Slop revision rules for Ghostwriter prose:
+- Cut filler openers and emphasis crutches. Start with the useful sentence.
+- Avoid business jargon such as navigate, unpack, landscape, game-changer, deep dive, moving forward, and circle back.
+- Remove adverbs, softeners, and intensifiers such as really, just, literally, genuinely, honestly, simply, actually, deeply, truly, fundamentally, importantly, and crucially.
+- Avoid formulaic structures: "not X but Y", "X is not the problem, Y is", negative buildup, rhetorical setups, and punchy one-line endings.
+- Use active voice. Name the person or team doing the action.
+- Do not give inanimate things human agency. Data does not tell us; a person reads data.
+- Be specific. Replace vague claims, lazy extremes, and abstract importance with concrete details from the job, profile, or user prompt.
+- Put the reader in the room. Use "you" when it fits the requested output.
+- Vary rhythm. Mix sentence lengths, prefer one or two items over three, and avoid stacked fragments.
+- Do not use em dashes.
+- Before answering, revise once for directness, rhythm, trust, authenticity, and density.
+`.trim();
 
 function truncate(value: string | null | undefined, max: number): string {
   if (!value) return "";
@@ -137,6 +154,14 @@ async function buildSystemPrompt(
   });
 }
 
+async function isStopSlopEnabled(): Promise<boolean> {
+  const raw = await settingsRepo.getSetting("ghostwriterStopSlopEnabled");
+  return (
+    settingsRegistry.ghostwriterStopSlopEnabled.parse(raw ?? undefined) ??
+    settingsRegistry.ghostwriterStopSlopEnabled.default()
+  );
+}
+
 export async function buildJobChatPromptContext(
   jobId: string,
 ): Promise<JobChatPromptContext> {
@@ -158,7 +183,13 @@ export async function buildJobChatPromptContext(
   }
 
   const profileSnapshot = buildProfileSnapshot(profile);
-  const systemPrompt = await buildSystemPrompt(style, profile);
+  const [baseSystemPrompt, stopSlopEnabled] = await Promise.all([
+    buildSystemPrompt(style, profile),
+    isStopSlopEnabled(),
+  ]);
+  const systemPrompt = stopSlopEnabled
+    ? `${baseSystemPrompt}\n\n${STOP_SLOP_GHOSTWRITER_PROMPT}`
+    : baseSystemPrompt;
   const jobSnapshot = buildJobSnapshot(job);
 
   if (!jobSnapshot.trim()) {
