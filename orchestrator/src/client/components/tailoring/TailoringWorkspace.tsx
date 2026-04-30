@@ -127,6 +127,15 @@ const toBaselineFromJob = (job: Job): TailoringBaseline => ({
   skillsJson: normalizeSkillsJson(job.tailoredSkills),
 });
 
+const toSavePayloadFromJob = (job: Job): TailoringSavePayload => ({
+  tailoredSummary: job.tailoredSummary ?? "",
+  tailoredHeadline: job.tailoredHeadline ?? "",
+  tailoredSkills: normalizeSkillsJson(job.tailoredSkills),
+  jobDescription: job.jobDescription ?? "",
+  selectedProjectIds: job.selectedProjectIds ?? "",
+  tracerLinksEnabled: Boolean(job.tracerLinksEnabled),
+});
+
 export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
   props,
 ) => {
@@ -154,7 +163,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
     isDirty,
     savedPayloadKey,
     applyIncomingDraft,
-    markSavedSnapshot,
+    markSavedJob,
     handleToggleProject,
     handleAddSkillGroup,
     handleUpdateSkillGroup,
@@ -282,9 +291,23 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
           }
 
           if (isMountedRef.current) setAutosaveStatus("saving");
-          await api.updateJob(props.job.id, snapshot);
-          markSavedSnapshot(snapshot);
-          persistedPayloadKeyRef.current = getTailoringSavePayloadKey(snapshot);
+          const snapshotKey = getTailoringSavePayloadKey(snapshot);
+          const updatedJob = await api.updateJob(props.job.id, snapshot);
+          if (!isMountedRef.current) return;
+          const updatedPayload = toSavePayloadFromJob(updatedJob);
+
+          const latestStillMatchesSnapshot =
+            latestPayloadRef.current &&
+            getTailoringSavePayloadKey(latestPayloadRef.current) ===
+              snapshotKey;
+          if (latestStillMatchesSnapshot) {
+            applyIncomingDraft(updatedJob);
+            latestPayloadRef.current = updatedPayload;
+          } else {
+            markSavedJob(updatedJob);
+          }
+          persistedPayloadKeyRef.current =
+            getTailoringSavePayloadKey(updatedPayload);
 
           const latestKey = latestPayloadRef.current
             ? getTailoringSavePayloadKey(latestPayloadRef.current)
@@ -312,7 +335,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
 
     saveInFlightRef.current = savePromise;
     await savePromise;
-  }, [editorProps, markSavedSnapshot, props.job.id]);
+  }, [applyIncomingDraft, editorProps, markSavedJob, props.job.id]);
 
   const flushAutosave = useCallback(async () => {
     if (!editorProps) return;
@@ -603,7 +626,7 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
               ) : (
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
-              Draft Content
+              AI Summarize
             </Button>
             <Button
               onClick={handleGeneratePdf}

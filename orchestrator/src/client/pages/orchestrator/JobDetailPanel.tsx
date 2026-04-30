@@ -119,7 +119,6 @@ const statusTone: Record<
     shell: "border-border/45 bg-muted/10",
     eyebrow: "text-muted-foreground",
     icon: "bg-sky-500/70",
-    button: "bg-orange-500 text-white hover:bg-orange-400",
   },
   processing: {
     shell: "border-border/45 bg-muted/10",
@@ -388,6 +387,21 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
     }
   }, [editedDescription, onJobUpdated, selectedJob]);
 
+  const openEditDetails = useCallback(() => {
+    window.setTimeout(() => setIsEditDetailsOpen(true), 0);
+  }, []);
+
+  const handleCopyInfo = useCallback(async () => {
+    if (!selectedJob) return;
+
+    try {
+      await copyTextToClipboard(formatJobForWebhook(selectedJob));
+      toast.success("Copied job info");
+    } catch {
+      toast.error("Could not copy job info");
+    }
+  }, [selectedJob]);
+
   const handleProcess = useCallback(async () => {
     if (!selectedJob) return;
     try {
@@ -627,7 +641,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onSelect={() => setIsEditDetailsOpen(true)}>
+                  <DropdownMenuItem onSelect={openEditDetails}>
                     <Edit2 className="mr-2 h-4 w-4" />
                     Edit details
                   </DropdownMenuItem>
@@ -640,14 +654,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
                     <Edit2 className="mr-2 h-4 w-4" />
                     Edit job description
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      void copyTextToClipboard(
-                        formatJobForWebhook(selectedJob),
-                      );
-                      toast.success("Copied job info");
-                    }}
-                  >
+                  <DropdownMenuItem onSelect={() => void handleCopyInfo()}>
                     <Copy className="mr-2 h-4 w-4" />
                     Copy job info
                   </DropdownMenuItem>

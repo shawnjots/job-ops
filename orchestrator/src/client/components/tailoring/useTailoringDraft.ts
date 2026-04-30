@@ -13,6 +13,8 @@ import {
 const parseSelectedIds = (value: string | null | undefined) =>
   new Set(value?.split(",").filter(Boolean) ?? []);
 
+const toSelectedIdsCsv = (ids: Set<string>) => Array.from(ids).sort().join(",");
+
 const hasSelectionDiff = (current: Set<string>, saved: Set<string>) => {
   if (current.size !== saved.size) return true;
   for (const id of current) {
@@ -38,7 +40,9 @@ export const getTailoringSavePayloadKey = (
     tailoredHeadline: payload.tailoredHeadline,
     tailoredSkills: payload.tailoredSkills,
     jobDescription: payload.jobDescription,
-    selectedProjectIds: payload.selectedProjectIds,
+    selectedProjectIds: toSelectedIdsCsv(
+      parseSelectedIds(payload.selectedProjectIds),
+    ),
     tracerLinksEnabled: payload.tracerLinksEnabled,
   });
 
@@ -119,7 +123,7 @@ export function useTailoringDraft({
   );
 
   const selectedIdsCsv = useMemo(
-    () => Array.from(selectedIds).join(","),
+    () => toSelectedIdsCsv(selectedIds),
     [selectedIds],
   );
 
@@ -152,7 +156,7 @@ export function useTailoringDraft({
         tailoredHeadline: savedHeadline,
         tailoredSkills: savedSkillsJson,
         jobDescription: savedDescription,
-        selectedProjectIds: Array.from(savedSelectedIds).join(","),
+        selectedProjectIds: toSelectedIdsCsv(savedSelectedIds),
         tracerLinksEnabled: savedTracerLinksEnabled,
       }),
     [
@@ -188,6 +192,16 @@ export function useTailoringDraft({
     setSavedSelectedIds(parseSelectedIds(snapshot.selectedProjectIds));
     setSavedSkillsJson(snapshot.tailoredSkills);
     setSavedTracerLinksEnabled(snapshot.tracerLinksEnabled);
+  }, []);
+
+  const markSavedJob = useCallback((incomingJob: Job) => {
+    const next = parseIncomingDraft(incomingJob);
+    setSavedSummary(next.summary);
+    setSavedHeadline(next.headline);
+    setSavedDescription(next.description);
+    setSavedSelectedIds(next.selectedIds);
+    setSavedSkillsJson(next.skillsJson);
+    setSavedTracerLinksEnabled(next.tracerLinksEnabled);
   }, []);
 
   const loadCatalog = useCallback(async (silently = false) => {
@@ -302,6 +316,7 @@ export function useTailoringDraft({
     savedPayloadKey,
     applyIncomingDraft,
     markSavedSnapshot,
+    markSavedJob,
     handleToggleProject,
     handleAddSkillGroup,
     handleUpdateSkillGroup,
