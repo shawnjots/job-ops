@@ -50,6 +50,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { trackProductEvent } from "@/lib/analytics";
 import {
   cn,
@@ -81,7 +87,7 @@ const tabCopy: Record<
 > = {
   brief: {
     label: "Brief",
-    description: "Read the role, fit, and raw job description.",
+    description: "Read the role, fit, and job description.",
     dotClassName: "bg-sky-500/70",
     activeClassName:
       "data-[state=active]:border-sky-400/35 data-[state=active]:bg-sky-500/10 data-[state=active]:text-sky-100",
@@ -723,23 +729,39 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
         onValueChange={(value) => setInspectorTab(value as InspectorTab)}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <TabsList className="grid h-auto grid-cols-3 gap-1 rounded-lg border border-border/35 bg-background/30 p-1 text-xs">
-          {Object.entries(tabCopy).map(([value, copy]) => (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className={cn(
-                "h-9 gap-2 border border-transparent text-xs text-muted-foreground data-[state=active]:shadow-none",
-                copy.activeClassName,
-              )}
-            >
-              <span
-                className={cn("h-1.5 w-1.5 rounded-full", copy.dotClassName)}
-              />
-              <span>{copy.label}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <TooltipProvider delayDuration={0}>
+          <TabsList className="grid h-auto grid-cols-3 gap-1 rounded-lg border border-border/35 bg-background/30 p-1 text-xs">
+            {Object.entries(tabCopy).map(([value, copy]) => {
+              const trigger = (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className={cn(
+                    "h-9 gap-2 border border-transparent text-xs text-muted-foreground data-[state=active]:shadow-none",
+                    copy.activeClassName,
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full",
+                      copy.dotClassName,
+                    )}
+                  />
+                  <span>{copy.label}</span>
+                </TabsTrigger>
+              );
+
+              return (
+                <Tooltip key={value}>
+                  <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-center">
+                    <p>{copy.description}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </TabsList>
+        </TooltipProvider>
 
         <div className="mt-2 border-l border-border/50 pl-2 text-[10px] text-muted-foreground/65">
           {tabCopy[inspectorTab].description}
@@ -780,7 +802,7 @@ export const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
                         void copyTextToClipboard(
                           selectedJob.jobDescription || "",
                         );
-                        toast.success("Copied raw description");
+                        toast.success("Copied job description");
                       }}
                     >
                       <Copy className="mr-1.5 h-3.5 w-3.5" />
