@@ -17,6 +17,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   fromEditableSkillGroups,
   getOriginalHeadline,
   getOriginalSkills,
@@ -66,7 +72,7 @@ interface TailoringBaseline {
 
 type AutosaveStatus = "saved" | "unsaved" | "saving" | "error";
 
-const AutosaveStatusCell: React.FC<{ status: AutosaveStatus }> = ({
+const AutosaveStatusIcon: React.FC<{ status: AutosaveStatus }> = ({
   status,
 }) => {
   const copy =
@@ -77,26 +83,38 @@ const AutosaveStatusCell: React.FC<{ status: AutosaveStatus }> = ({
         : status === "error"
           ? "Save failed"
           : "Saved";
-  const tone =
+  const iconClassName =
     status === "error"
       ? "text-rose-300"
       : status === "unsaved"
         ? "text-amber-300"
-        : "text-muted-foreground";
+        : status === "saving"
+          ? "text-muted-foreground"
+          : "text-emerald-400/80";
 
   return (
-    <div className="flex h-10 items-center gap-2 rounded-md border border-border/35 bg-background/20 px-3 text-xs">
-      {status === "saving" ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-      ) : status === "error" ? (
-        <CircleAlert className="h-3.5 w-3.5 text-rose-300" />
-      ) : status === "unsaved" ? (
-        <CircleAlert className="h-3.5 w-3.5 text-amber-300" />
-      ) : (
-        <Check className="h-3.5 w-3.5 text-emerald-400/80" />
-      )}
-      <span className={tone}>{copy}</span>
-    </div>
+    <TooltipProvider delayDuration={0}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground"
+            role="img"
+            aria-label={copy}
+          >
+            {status === "saving" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : status === "error" || status === "unsaved" ? (
+              <CircleAlert className={`h-3.5 w-3.5 ${iconClassName}`} />
+            ) : (
+              <Check className={`h-3.5 w-3.5 ${iconClassName}`} />
+            )}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{copy}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
@@ -564,15 +582,17 @@ export const TailoringWorkspace: React.FC<TailoringWorkspaceProps> = (
       <div className="space-y-4">
         <div className="space-y-3 pb-2">
           <div>
-            <h3 className="text-sm font-semibold text-foreground/85">
-              Tailoring
-            </h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold text-foreground/85">
+                Tailoring
+              </h3>
+              <AutosaveStatusIcon status={autosaveStatus} />
+            </div>
             <p className="mt-0.5 text-[10px] text-muted-foreground/70">
               Changes autosave. Draft resume content, or generate the PDF.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            <AutosaveStatusCell status={autosaveStatus} />
+          <div className="grid gap-2 sm:grid-cols-2">
             <Button
               variant="outline"
               onClick={handleSummarizeEditor}
