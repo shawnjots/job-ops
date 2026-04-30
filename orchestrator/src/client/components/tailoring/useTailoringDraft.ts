@@ -21,6 +21,27 @@ const hasSelectionDiff = (current: Set<string>, saved: Set<string>) => {
   return false;
 };
 
+export interface TailoringSavePayload {
+  tailoredSummary: string;
+  tailoredHeadline: string;
+  tailoredSkills: string;
+  jobDescription: string;
+  selectedProjectIds: string;
+  tracerLinksEnabled: boolean;
+}
+
+export const getTailoringSavePayloadKey = (
+  payload: TailoringSavePayload,
+): string =>
+  JSON.stringify({
+    tailoredSummary: payload.tailoredSummary,
+    tailoredHeadline: payload.tailoredHeadline,
+    tailoredSkills: payload.tailoredSkills,
+    jobDescription: payload.jobDescription,
+    selectedProjectIds: payload.selectedProjectIds,
+    tracerLinksEnabled: payload.tracerLinksEnabled,
+  });
+
 const parseIncomingDraft = (incomingJob: Job) => {
   const summary = incomingJob.tailoredSummary || "";
   const headline = incomingJob.tailoredHeadline || "";
@@ -124,6 +145,26 @@ export function useTailoringDraft({
     savedSelectedIds,
   ]);
 
+  const savedPayloadKey = useMemo(
+    () =>
+      getTailoringSavePayloadKey({
+        tailoredSummary: savedSummary,
+        tailoredHeadline: savedHeadline,
+        tailoredSkills: savedSkillsJson,
+        jobDescription: savedDescription,
+        selectedProjectIds: Array.from(savedSelectedIds).join(","),
+        tracerLinksEnabled: savedTracerLinksEnabled,
+      }),
+    [
+      savedSummary,
+      savedHeadline,
+      savedSkillsJson,
+      savedDescription,
+      savedSelectedIds,
+      savedTracerLinksEnabled,
+    ],
+  );
+
   const applyIncomingDraft = useCallback((incomingJob: Job) => {
     const next = parseIncomingDraft(incomingJob);
     setSummary(next.summary);
@@ -138,6 +179,15 @@ export function useTailoringDraft({
     setSavedSkillsJson(next.skillsJson);
     setTracerLinksEnabled(next.tracerLinksEnabled);
     setSavedTracerLinksEnabled(next.tracerLinksEnabled);
+  }, []);
+
+  const markSavedSnapshot = useCallback((snapshot: TailoringSavePayload) => {
+    setSavedSummary(snapshot.tailoredSummary);
+    setSavedHeadline(snapshot.tailoredHeadline);
+    setSavedDescription(snapshot.jobDescription);
+    setSavedSelectedIds(parseSelectedIds(snapshot.selectedProjectIds));
+    setSavedSkillsJson(snapshot.tailoredSkills);
+    setSavedTracerLinksEnabled(snapshot.tracerLinksEnabled);
   }, []);
 
   const loadCatalog = useCallback(async (silently = false) => {
@@ -249,7 +299,9 @@ export function useTailoringDraft({
     tracerLinksEnabled,
     setTracerLinksEnabled,
     isDirty,
+    savedPayloadKey,
     applyIncomingDraft,
+    markSavedSnapshot,
     handleToggleProject,
     handleAddSkillGroup,
     handleUpdateSkillGroup,
